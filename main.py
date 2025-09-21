@@ -218,29 +218,84 @@ class AllocatorAI:
             logger.error(f"Failed to log trade: {e}")
     
     def start_discovery(self):
-        """Start whale discovery process"""
+        """Start simultaneous whale discovery for all modes"""
+        import concurrent.futures
+        from allocator.utils.web3_utils import Web3Manager
+        
+        def run_discovery_mode(mode: str):
+            """Run a single discovery mode with its own WebSocket connection"""
+            try:
+                # Create separate WebSocket connection for this discovery mode
+                discovery_web3 = Web3Manager(self.config.web3.rpc_url)
+                
+                logger.info(f"Starting discovery with mode: {mode}")
+                new_whales = self.whale_tracker.discover_whales_from_blocks(
+                    discovery_web3.w3,
+                    mode,
+                    simulate=(self.mode != "LIVE")
+                )
+                logger.info(f"Discovery mode {mode} found {len(new_whales)} candidate whales")
+                return mode, new_whales
+                
+            except Exception as e:
+                logger.error(f"Discovery mode {mode} failed: {e}")
+                return mode, []
+        
         def discovery_worker():
             while self.is_running:
                 try:
-                    for mode in self.config.discovery.modes:
-                        logger.info(f"Starting discovery with mode: {mode}")
-                        new_whales = self.whale_tracker.discover_whales_from_blocks(
-                            self.web3_manager.w3,
-                            mode,
-                            simulate=(self.mode != "LIVE")
-                        )
-                        logger.info(f"Discovery mode {mode} found {len(new_whales)} new whales")
+                    logger.info(f"Starting simultaneous discovery for modes: {self.config.discovery.modes}")
+                    
+                    # Run all discovery modes simultaneously with separate WebSocket connections
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=len(self.config.discovery.modes)) as executor:
+                        # Submit all discovery modes simultaneously
+                        futures = {
+                            executor.submit(run_discovery_mode, mode): mode 
+                            for mode in self.config.discovery.modes
+                        }
+                        
+                        # Collect results from all modes
+                        all_candidates = {}
+                        for future in concurrent.futures.as_completed(futures):
+                            mode = futures[future]
+                            try:
+                                result_mode, candidates = future.result()
+                                all_candidates[result_mode] = candidates
+                            except Exception as e:
+                                logger.error(f"Discovery mode {mode} exception: {e}")
+                                all_candidates[mode] = []
+                    
+                    # Now validate all discovered candidates with Moralis
+                    total_validated = 0
+                    for mode, candidates in all_candidates.items():
+                        logger.info(f"Validating {len(candidates)} candidates from {mode} with Moralis...")
+                        
+                        validated_count = 0
+                        for whale_address in candidates:
+                            # Check Moralis PnL to see if whale is worth tracking
+                            if self.whale_tracker.bootstrap_whale_from_moralis(
+                                whale_address,
+                                min_roi_pct=self.config.trading.min_moralis_roi_pct,
+                                min_profit_usd=self.config.trading.min_moralis_profit_usd,
+                                min_trades=self.config.trading.min_moralis_trades
+                            ):
+                                validated_count += 1
+                        
+                        logger.info(f"Mode {mode}: {validated_count}/{len(candidates)} whales validated by Moralis")
+                        total_validated += validated_count
+                    
+                    logger.info(f"Discovery round completed. Total validated whales: {total_validated}")
                     
                     # Wait before next discovery round
                     time.sleep(self.config.discovery.refresh_interval)
                     
                 except Exception as e:
-                    logger.error(f"Discovery error: {e}")
+                    logger.error(f"Discovery worker error: {e}")
                     time.sleep(60)  # Wait before retrying
         
         discovery_thread = threading.Thread(target=discovery_worker, daemon=True)
         discovery_thread.start()
-        logger.info("Started whale discovery process")
+        logger.info(f"Started simultaneous whale discovery for {len(self.config.discovery.modes)} modes")
     
     def start_monitoring(self):
         """Start mempool monitoring"""
