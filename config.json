@@ -9,5 +9,10 @@
   "gas_boost": 1.1,
   "min_moralis_roi_pct": 5,
   "min_moralis_profit_usd": 500,
-  "min_moralis_trades": 5
+  "min_moralis_trades": 5,
+  "discovery": {
+    "modes": ["bot_hunter", "active_whale", "quick_profit_whale"],
+    "refresh_interval": 600,
+    "max_whales": 100
+  }
 }
