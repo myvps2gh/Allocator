@@ -19,9 +19,9 @@ class TradeParser:
         self.w3 = w3
         self.token_manager = token_manager or TokenManager(w3)
         
-        # Router addresses
-        self.uniswap_v2 = "0x7a250d5630b4cf539739df2c5dacb4c659f2488d"
-        self.uniswap_v3 = "0xe592427a0aece92de3ede1f18e0157c05861564"
+        # Router addresses (checksummed)
+        self.uniswap_v2 = Web3.to_checksum_address("0x7a250d5630b4cf539739df2c5dacb4c659f2488d")
+        self.uniswap_v3 = Web3.to_checksum_address("0xe592427a0aece92de3ede1f18e0157c05861564")
         
         # Load contract ABIs
         self.v2_abi = self._load_abi("uniswap_v2_router")

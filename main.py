@@ -11,6 +11,20 @@ import argparse
 import json
 from pathlib import Path
 
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    # If python-dotenv is not installed, try to load manually
+    env_file = Path(__file__).parent / ".env"
+    if env_file.exists():
+        with open(env_file) as f:
+            for line in f:
+                if line.strip() and not line.startswith('#') and '=' in line:
+                    key, value = line.strip().split('=', 1)
+                    os.environ[key] = value
+
 # Add the allocator package to the path
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -265,8 +279,11 @@ class AllocatorAI:
         logger.info(f"Starting Allocator AI in {mode} mode")
         
         try:
-            # Setup wallet
-            self.setup_wallet()
+            # Setup wallet (skip in test modes if wallet.json doesn't exist)
+            if self.mode == "LIVE" or os.path.exists("wallet.json"):
+                self.setup_wallet()
+            else:
+                logger.info(f"Skipping wallet setup for {self.mode} mode (no wallet.json found)")
             
             # Setup monitoring
             self.setup_monitoring()
