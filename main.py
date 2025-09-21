@@ -357,8 +357,14 @@ class AllocatorAI:
             
             # Start components (dashboard first, then discovery)
             self.start_dashboard()
+            logger.info("Dashboard startup completed")
+            
             self.start_monitoring()
+            logger.info("Monitoring startup completed")
+            
+            logger.info("About to start discovery...")
             self.start_discovery()
+            logger.info("Discovery startup completed")
             
             # Keep running
             logger.info("Allocator AI is running. Press Ctrl+C to stop.")
