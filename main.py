@@ -231,8 +231,12 @@ class AllocatorAI:
     def start_monitoring(self):
         """Start mempool monitoring"""
         if self.mempool_watcher:
-            self.mempool_watcher.start_watching(use_mempool=(self.mode == "LIVE"))
-            logger.info("Started mempool monitoring")
+            # Determine mempool usage based on mode
+            use_mempool = self.mode in ["LIVE", "DRY_RUN", "TEST"]
+            self.mempool_watcher.start_watching(use_mempool=use_mempool)
+            
+            monitoring_type = "mempool" if use_mempool else "block"
+            logger.info(f"Started {monitoring_type} monitoring for mode: {self.mode}")
     
     def start_dashboard(self, host: str = "0.0.0.0", port: int = 8080):
         """Start web dashboard"""
@@ -288,7 +292,7 @@ class AllocatorAI:
 def main():
     """Main entry point"""
     parser = argparse.ArgumentParser(description="Allocator AI - Whale Following Trading Bot")
-    parser.add_argument("--mode", choices=["LIVE", "DRY_RUN", "TEST"], default="TEST",
+    parser.add_argument("--mode", choices=["LIVE", "DRY_RUN", "DRY_RUN_MEMPOOLHACK", "TEST"], default="TEST",
                        help="Operation mode")
     parser.add_argument("--config", default="config.json", help="Configuration file")
     parser.add_argument("--no-mempool", action="store_true", help="Use block monitoring instead of mempool")
