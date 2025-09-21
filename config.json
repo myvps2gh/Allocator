@@ -11,7 +11,7 @@
   "min_moralis_profit_usd": 300,
   "min_moralis_trades": 3,
   "discovery": {
-    "modes": ["bot_hunter", "active_whale", "quick_profit_whale", "fast_mover_whale"],
+    "modes": ["bot_hunter", "active_whale", "quick_profit_whale"],
     "refresh_interval": 300,
     "max_whales": 150,
     "mode_settings": {
