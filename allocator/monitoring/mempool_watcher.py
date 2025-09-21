@@ -26,8 +26,8 @@ class MempoolWatcher:
         
         # Router addresses to monitor (checksummed)
         self.monitored_routers = {
-            Web3.to_checksum_address("0x7a250d5630b4cf539739df2c5dacb4c659f2488d").lower(),  # Uniswap V2
-            Web3.to_checksum_address("0xe592427a0aece92de3ede1f18e0157c05861564").lower()   # Uniswap V3
+            Web3.to_checksum_address("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D").lower(),  # Uniswap V2
+            Web3.to_checksum_address("0xE592427A0AEce92De3Edee1F18E0157C05861564").lower()   # Uniswap V3
         }
         
         # State
