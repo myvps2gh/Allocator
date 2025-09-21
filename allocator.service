@@ -1,0 +1,23 @@
+[Unit]
+Description=Allocator AI - Whale Following Trading Bot
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/Allocator
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/python3 /root/Allocator/main.py --mode LIVE
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=allocator-ai
+
+# Environment variables (optional - can use .env file instead)
+# Environment="MORALIS_API_KEY=your_api_key_here"
+# Environment="WALLET_PASS=your_wallet_password"
+
+[Install]
+WantedBy=multi-user.target
