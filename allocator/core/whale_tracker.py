@@ -294,64 +294,24 @@ class WhaleTracker:
         # Track candidate statistics
         candidate_stats = defaultdict(lambda: {"profit": Decimal(0), "trades": 0})
         
-        # Scan blocks for whale candidates using parallel processing
-        import concurrent.futures
-        import threading
-        
-        stats_lock = threading.Lock()
-        
-        def process_block_batch(block_range):
-            """Process a batch of blocks in parallel"""
-            batch_stats = defaultdict(lambda: {"profit": Decimal(0), "trades": 0})
-            
-            for block_num in block_range:
-                try:
-                    block = w3.eth.get_block(block_num, full_transactions=True)
-                    
-                    for tx in block.transactions:
-                        # Check if transaction is to Uniswap
-                        if tx.to and tx.to.lower() in [
-                            "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D".lower(),  # Uniswap V2
-                            "0xE592427A0AEce92De3Edee1F18E0157C05861564".lower()   # Uniswap V3
-                        ]:
-                            actor = tx["from"].lower()
-                            batch_stats[actor]["trades"] += 1
-                            batch_stats[actor]["profit"] += Decimal(tx.value) / (10**18)
-                            
-                except Exception as e:
-                    logger.debug(f"Failed to process block {block_num}: {e}")
-                    continue
-            
-            return batch_stats
-        
-        # Split blocks into batches for parallel processing
-        total_blocks = end_block - start_block + 1
-        batch_size = max(50, total_blocks // 8)  # Optimize batch size based on total blocks
-        max_workers = min(8, max(1, total_blocks // batch_size))  # Scale workers based on work
-        
-        logger.info(f"Processing {total_blocks} blocks in batches of {batch_size} using {max_workers} workers")
-        
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Create block ranges for each batch
-            block_ranges = []
-            for i in range(start_block, end_block + 1, batch_size):
-                batch_end = min(i + batch_size - 1, end_block)
-                block_ranges.append(range(i, batch_end + 1))
-            
-            # Process batches in parallel
-            futures = [executor.submit(process_block_batch, block_range) for block_range in block_ranges]
-            
-            # Collect results from all batches
-            for future in concurrent.futures.as_completed(futures):
-                try:
-                    batch_stats = future.result()
-                    # Merge batch results into main candidate_stats
-                    with stats_lock:
-                        for addr, stats in batch_stats.items():
-                            candidate_stats[addr]["trades"] += stats["trades"]
-                            candidate_stats[addr]["profit"] += stats["profit"]
-                except Exception as e:
-                    logger.error(f"Batch processing failed: {e}")
+        # Scan blocks for whale candidates
+        for block_num in range(start_block, end_block + 1):
+            try:
+                block = w3.eth.get_block(block_num, full_transactions=True)
+                
+                for tx in block.transactions:
+                    # Check if transaction is to Uniswap
+                    if tx.to and tx.to.lower() in [
+                        "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D".lower(),  # Uniswap V2
+                        "0xE592427A0AEce92De3Edee1F18E0157C05861564".lower()   # Uniswap V3
+                    ]:
+                        actor = tx["from"].lower()
+                        candidate_stats[actor]["trades"] += 1
+                        candidate_stats[actor]["profit"] += Decimal(tx.value) / (10**18)
+                        
+            except Exception as e:
+                logger.debug(f"Failed to process block {block_num}: {e}")
+                continue
         
         # Filter candidates
         new_whales = []
@@ -373,6 +333,7 @@ class WhaleTracker:
         
         logger.info(f"Successfully added {len(added_whales)} whales to tracking")
         return added_whales
+    
     
     def get_whale_stats(self, whale_address: str) -> Optional[WhaleStats]:
         """Get current stats for a whale"""
