@@ -224,19 +224,46 @@ class AllocatorAI:
         from allocator.utils.web3_utils import Web3Manager
         
         def run_discovery_mode(mode: str):
-            """Run a single discovery mode with its own WebSocket connection"""
+            """Run a single discovery mode with its own WebSocket connection and immediate Moralis validation"""
             try:
                 # Create separate WebSocket connection for this discovery mode
                 discovery_web3 = Web3Manager(self.config.web3.rpc_url)
                 
                 logger.info(f"Starting discovery with mode: {mode}")
-                new_whales = self.whale_tracker.discover_whales_from_blocks(
+                
+                # Get candidates from blockchain scanning
+                candidate_whales = self.whale_tracker.discover_whales_from_blocks(
                     discovery_web3.w3,
                     mode,
-                    simulate=(self.mode != "LIVE")
+                    simulate=True  # Always simulate to get candidates only
                 )
-                logger.info(f"Discovery mode {mode} found {len(new_whales)} candidate whales")
-                return mode, new_whales
+                logger.info(f"Discovery mode {mode} found {len(candidate_whales)} candidate whales")
+                
+                # Immediately validate with Moralis (unless in DRY_RUN_WO_MOR mode)
+                validated_whales = []
+                if self.mode == "DRY_RUN_WO_MOR":
+                    logger.info(f"Mode {mode}: Skipping Moralis validation (DRY_RUN_WO_MOR)")
+                    validated_whales = candidate_whales  # Return candidates without validation
+                else:
+                    logger.info(f"Mode {mode}: Validating {len(candidate_whales)} candidates with Moralis...")
+                    
+                    for whale_address in candidate_whales:
+                        try:
+                            # Check Moralis PnL to see if whale is worth tracking
+                            if self.whale_tracker.bootstrap_whale_from_moralis(
+                                whale_address,
+                                min_roi_pct=self.config.trading.min_moralis_roi_pct,
+                                min_profit_usd=self.config.trading.min_moralis_profit_usd,
+                                min_trades=self.config.trading.min_moralis_trades
+                            ):
+                                validated_whales.append(whale_address)
+                                logger.info(f"Mode {mode}: Whale {whale_address[:10]}... validated and added to tracking")
+                        except Exception as e:
+                            logger.warning(f"Mode {mode}: Failed to validate whale {whale_address[:10]}...: {e}")
+                    
+                    logger.info(f"Mode {mode}: {len(validated_whales)}/{len(candidate_whales)} whales validated by Moralis")
+                
+                return mode, validated_whales
                 
             except Exception as e:
                 logger.error(f"Discovery mode {mode} failed: {e}")
@@ -248,7 +275,8 @@ class AllocatorAI:
                     logger.info(f"Starting simultaneous discovery for modes: {self.config.discovery.modes}")
                     
                     # Run all discovery modes simultaneously with separate WebSocket connections
-                    all_candidates = {}
+                    # Each mode handles its own Moralis validation independently
+                    all_validated_whales = {}
                     
                     with concurrent.futures.ThreadPoolExecutor(max_workers=len(self.config.discovery.modes)) as executor:
                         # Submit all discovery modes simultaneously
@@ -257,42 +285,29 @@ class AllocatorAI:
                             for mode in self.config.discovery.modes
                         }
                         
-                        # Collect results from all modes
+                        # Collect results from all modes (each mode already validated)
                         for future in concurrent.futures.as_completed(futures):
                             mode = futures[future]
                             try:
-                                result_mode, candidates = future.result()
-                                all_candidates[result_mode] = candidates
+                                result_mode, validated_whales = future.result()
+                                all_validated_whales[result_mode] = validated_whales
                                 logger.info(f"Discovery mode {result_mode} completed successfully")
                             except Exception as e:
                                 logger.error(f"Discovery mode {mode} exception: {e}")
-                                all_candidates[mode] = []
+                                all_validated_whales[mode] = []
                     
-                    # Validate discovered candidates with Moralis (unless in DRY_RUN_WO_MOR mode)
+                    # Summary of the discovery round
+                    total_validated = sum(len(whales) for whales in all_validated_whales.values())
                     if self.mode == "DRY_RUN_WO_MOR":
-                        logger.info("DRY_RUN_WO_MOR mode: Skipping Moralis validation to preserve CU")
-                        total_candidates = sum(len(candidates) for candidates in all_candidates.values())
-                        logger.info(f"Discovery round completed. Total candidates found: {total_candidates} (not validated)")
+                        logger.info(f"Discovery round completed. Total candidates found: {total_validated} (not validated with Moralis)")
                     else:
-                        total_validated = 0
-                        for mode, candidates in all_candidates.items():
-                            logger.info(f"Validating {len(candidates)} candidates from {mode} with Moralis...")
-                            
-                            validated_count = 0
-                            for whale_address in candidates:
-                                # Check Moralis PnL to see if whale is worth tracking
-                                if self.whale_tracker.bootstrap_whale_from_moralis(
-                                    whale_address,
-                                    min_roi_pct=self.config.trading.min_moralis_roi_pct,
-                                    min_profit_usd=self.config.trading.min_moralis_profit_usd,
-                                    min_trades=self.config.trading.min_moralis_trades
-                                ):
-                                    validated_count += 1
-                            
-                            logger.info(f"Mode {mode}: {validated_count}/{len(candidates)} whales validated by Moralis")
-                            total_validated += validated_count
-                        
                         logger.info(f"Discovery round completed. Total validated whales: {total_validated}")
+                    
+                    # Log detailed results per mode
+                    for mode, whales in all_validated_whales.items():
+                        if len(whales) > 0:
+                            whale_preview = [whale[:10] + "..." for whale in whales[:3]]
+                            logger.info(f"Mode {mode} result: {len(whales)} whales {whale_preview}")
                     
                     # Wait before next discovery round
                     refresh_interval = self.config.discovery.refresh_interval
