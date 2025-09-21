@@ -67,7 +67,8 @@ class AllocatorAI:
         self.whale_tracker = WhaleTracker(
             self.config.moralis_api_key,
             self.cache_manager,
-            self.db_manager
+            self.db_manager,
+            self.config.discovery
         )
         
         self.risk_manager = RiskManager(

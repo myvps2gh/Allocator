@@ -47,10 +47,13 @@ class DiscoveryConfig:
     modes: List[str] = None
     refresh_interval: int = 600  # 10 minutes
     max_whales: int = 100
+    mode_settings: dict = None
     
     def __post_init__(self):
         if self.modes is None:
             self.modes = ["active_whale", "quick_profit_whale", "fast_mover_whale"]
+        if self.mode_settings is None:
+            self.mode_settings = {}
 
 
 @dataclass
@@ -111,7 +114,8 @@ class Config:
             discovery=DiscoveryConfig(
                 modes=config_data.get("discovery", {}).get("modes", ["active_whale", "quick_profit_whale", "fast_mover_whale"]),
                 refresh_interval=config_data.get("discovery", {}).get("refresh_interval", 600),
-                max_whales=config_data.get("discovery", {}).get("max_whales", 100)
+                max_whales=config_data.get("discovery", {}).get("max_whales", 100),
+                mode_settings=config_data.get("discovery", {}).get("mode_settings", {})
             ),
             logging=LoggingConfig(
                 level=os.environ.get("LOG_LEVEL", "INFO"),

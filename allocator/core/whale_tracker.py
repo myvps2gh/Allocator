@@ -35,7 +35,7 @@ class WhaleStats:
 class WhaleTracker:
     """Advanced whale tracking and scoring system"""
     
-    def __init__(self, moralis_api_key: str, cache_manager: CacheManager, db_manager):
+    def __init__(self, moralis_api_key: str, cache_manager: CacheManager, db_manager, discovery_config=None):
         self.moralis_api_key = moralis_api_key
         self.cache = cache_manager
         self.db = db_manager
@@ -56,36 +56,40 @@ class WhaleTracker:
         # Tracked whales
         self.tracked_whales = set()
         
-        # Discovery modes configuration
-        self.discovery_modes = {
-            "bot_hunter": {
-                "blocks_back": 2000,
-                "min_trades": 30,
-                "min_pnl_threshold": 200
-            },
-            "active_whale": {
-                "blocks_back": 15000,
-                "min_trades": 20,
-                "min_pnl_threshold": 100
-            },
-            "lazy_whale": {
-                "blocks_back": 50000,
-                "min_trades": 10,
-                "min_pnl_threshold": 300
-            },
-            "quick_profit_whale": {
-                "blocks_back": 15000,
-                "min_trades": 5,
-                "min_pnl_threshold": 50,
-                "profit_window_hours": 72
-            },
-            "fast_mover_whale": {
-                "blocks_back": 17000,
-                "min_trades": 8,
-                "min_pnl_threshold": 50,
-                "min_roi": 0.20
+        # Discovery modes configuration (load from config or use defaults)
+        if discovery_config and discovery_config.mode_settings:
+            self.discovery_modes = discovery_config.mode_settings
+        else:
+            # Default fallback settings
+            self.discovery_modes = {
+                "bot_hunter": {
+                    "blocks_back": 5000,
+                    "min_trades": 15,
+                    "min_pnl_threshold": 50
+                },
+                "active_whale": {
+                    "blocks_back": 18000,
+                    "min_trades": 8,
+                    "min_pnl_threshold": 25
+                },
+                "lazy_whale": {
+                    "blocks_back": 18500,
+                    "min_trades": 6,
+                    "min_pnl_threshold": 100
+                },
+                "quick_profit_whale": {
+                    "blocks_back": 15000,
+                    "min_trades": 5,
+                    "min_pnl_threshold": 40,
+                    "profit_window_hours": 72
+                },
+                "fast_mover_whale": {
+                    "blocks_back": 17000,
+                    "min_trades": 6,
+                    "min_pnl_threshold": 35,
+                    "min_roi": 0.15
+                }
             }
-        }
     
     def update_whale_score(self, whale_address: str, pnl_eth: Decimal) -> WhaleStats:
         """Update whale performance after a mirrored trade settles"""
