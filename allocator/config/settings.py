@@ -108,7 +108,11 @@ class Config:
             web3=Web3Config(
                 rpc_url=os.environ.get("WEB3_RPC", config_data.get("web3_rpc", "ws://152.53.148.57:8546"))
             ),
-            discovery=DiscoveryConfig(),
+            discovery=DiscoveryConfig(
+                modes=config_data.get("discovery", {}).get("modes", ["active_whale", "quick_profit_whale", "fast_mover_whale"]),
+                refresh_interval=config_data.get("discovery", {}).get("refresh_interval", 600),
+                max_whales=config_data.get("discovery", {}).get("max_whales", 100)
+            ),
             logging=LoggingConfig(
                 level=os.environ.get("LOG_LEVEL", "INFO"),
                 log_dir=os.environ.get("LOG_DIR", "logs")
