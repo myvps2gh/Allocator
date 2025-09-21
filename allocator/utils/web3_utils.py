@@ -23,7 +23,15 @@ class Web3Manager:
         """Establish Web3 connection"""
         try:
             if self.rpc_url.startswith('ws'):
-                self.w3 = Web3(Web3.LegacyWebSocketProvider(self.rpc_url))
+                # Use LegacyWebSocketProvider with larger message limits for Erigon 3.0.17
+                self.w3 = Web3(Web3.LegacyWebSocketProvider(
+                    self.rpc_url,
+                    websocket_kwargs={
+                        'max_size': 20 * 1024 * 1024,  # 20MB message limit
+                        'read_limit': 20 * 1024 * 1024,  # 20MB read buffer
+                        'write_limit': 20 * 1024 * 1024,  # 20MB write buffer
+                    }
+                ))
             else:
                 self.w3 = Web3(Web3.HTTPProvider(self.rpc_url))
             
