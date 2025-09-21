@@ -2,7 +2,7 @@ import os, time, json, csv, datetime, threading, argparse, logging
 from collections import defaultdict
 from threading import Lock
 from pathlib import Path
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 import secrets
 from flask import Flask, render_template_string
 from web3 import Web3
@@ -14,49 +14,280 @@ import requests
 import sqlite3
 import time
 
-MORALIS_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJub25jZSI6IjQ3YWMxNmY1LWJhMDgtNDEzMi05M2I4LTdjZmZhNTQ0NWQwNiIsIm9yZ0lkIjoiNDcxNDM0IiwidXNlcklkIjoiNDg0OTcyIiwidHlwZUlkIjoiM2I5YzlmOGEtNjlkNy00YzBkLWI1YTUtMjY4MzIwZDYzNzliIiwidHlwZSI6IlBST0pFQ1QiLCJpYXQiOjE3NTgyMjQ2NTgsImV4cCI6NDkxMzk4NDY1OH0.6HJ4ANNa_RXnBrnQkVZIZTOX4ksum0hz3elvq59pj8Q"
+MORALIS_API_KEY = os.environ.get("MORALIS_API_KEY")
+if not MORALIS_API_KEY:
+    raise ValueError("MORALIS_API_KEY environment variable not set")
 MORALIS_BASE = "https://deep-index.moralis.io/api/v2.2"
 REFRESH_INTERVAL = 24 * 3600  # 24 hours
 
 from eth_account import Account
 from cryptography.fernet import Fernet
+import re
+from typing import Optional, Union
 
 
 
 DB_FILE = "whales.db"
 
-def init_db():
-    conn = sqlite3.connect(DB_FILE)
-    conn.execute("""
-    CREATE TABLE IF NOT EXISTS whales (
-        address TEXT PRIMARY KEY,
-        moralis_roi_pct REAL,
-        roi_usd REAL,
-        trades INTEGER,
-        bootstrap_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        last_refresh TIMESTAMP
-    )
-    """)
-    conn.commit()
-    conn.close()
+class DatabaseManager:
+    """Optimized database manager with connection pooling and better performance"""
+    
+    def __init__(self, db_file: str = DB_FILE):
+        self.db_file = db_file
+        self.conn = None
+        self.lock = threading.Lock()
+        self._init_connection()
+    
+    def _init_connection(self):
+        """Initialize database connection with optimizations"""
+        with self.lock:
+            if self.conn is None:
+                self.conn = sqlite3.connect(
+                    self.db_file, 
+                    check_same_thread=False,
+                    timeout=30.0
+                )
+                # Performance optimizations
+                self.conn.execute("PRAGMA journal_mode=WAL")  # Better concurrency
+                self.conn.execute("PRAGMA synchronous=NORMAL")  # Faster writes
+                self.conn.execute("PRAGMA cache_size=10000")  # Larger cache
+                self.conn.execute("PRAGMA temp_store=MEMORY")  # In-memory temp tables
+                self._create_tables()
+    
+    def _create_tables(self):
+        """Create database tables if they don't exist"""
+        self.conn.execute("""
+        CREATE TABLE IF NOT EXISTS whales (
+            address TEXT PRIMARY KEY,
+            moralis_roi_pct REAL,
+            roi_usd REAL,
+            trades INTEGER,
+            bootstrap_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_refresh TIMESTAMP
+        )
+        """)
+        self.conn.commit()
+    
+    def get_whale(self, addr: str):
+        """Get whale data from database"""
+        with self.lock:
+            try:
+                cursor = self.conn.execute(
+                    "SELECT * FROM whales WHERE address=?", 
+                    (addr.lower(),)
+                )
+                return cursor.fetchone()
+            except sqlite3.Error as e:
+                logger.error(f"Database error getting whale {addr}: {e}")
+                return None
+    
+    def save_whale(self, addr: str, roi_pct: float, usd: float, trades: int):
+        """Save whale data to database"""
+        with self.lock:
+            try:
+                self.conn.execute("""
+                    INSERT OR REPLACE INTO whales 
+                    (address, moralis_roi_pct, roi_usd, trades, last_refresh)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (addr.lower(), float(roi_pct), float(usd), int(trades), int(time.time())))
+                self.conn.commit()
+                return True
+            except sqlite3.Error as e:
+                logger.error(f"Database error saving whale {addr}: {e}")
+                return False
+    
+    def get_all_whales(self):
+        """Get all whales from database"""
+        with self.lock:
+            try:
+                cursor = self.conn.execute("SELECT * FROM whales")
+                return cursor.fetchall()
+            except sqlite3.Error as e:
+                logger.error(f"Database error getting all whales: {e}")
+                return []
+    
+    def close(self):
+        """Close database connection"""
+        with self.lock:
+            if self.conn:
+                self.conn.close()
+                self.conn = None
 
+# Global database manager instance
+db_manager = DatabaseManager()
+
+# Backward compatibility functions
 def get_whale_from_db(addr):
-    conn = sqlite3.connect(DB_FILE)
-    row = conn.execute("SELECT * FROM whales WHERE address=?", (addr.lower(),)).fetchone()
-    conn.close()
-    return row
+    return db_manager.get_whale(addr)
 
 def save_whale_to_db(addr, roi_pct, usd, trades):
-    conn = sqlite3.connect(DB_FILE)
-    conn.execute("""
-        INSERT OR REPLACE INTO whales (address, moralis_roi_pct, roi_usd, trades, last_refresh)
-        VALUES (?, ?, ?, ?, ?)
-    """, (addr.lower(), float(roi_pct), float(usd), int(trades), int(time.time())))
-    conn.commit()
-    conn.close()
+    return db_manager.save_whale(addr, roi_pct, usd, trades)
 
-# Initialize DB once at startup
-init_db()
+# ------------------ INPUT VALIDATION ------------------
+
+class ValidationError(Exception):
+    """Custom exception for validation errors"""
+    pass
+
+def validate_ethereum_address(address: str) -> bool:
+    """Validate Ethereum address format"""
+    if not address or not isinstance(address, str):
+        return False
+    
+    # Check format: 0x + 40 hex characters
+    pattern = r'^0x[a-fA-F0-9]{40}$'
+    if not re.match(pattern, address):
+        return False
+    
+    # Additional checksum validation
+    try:
+        # This will validate checksum if present
+        return Web3.is_address(address)
+    except:
+        return False
+
+def validate_amount(amount: Union[str, int, float, Decimal]) -> bool:
+    """Validate trade amount is reasonable"""
+    try:
+        amount = Decimal(str(amount))
+        # Must be positive and less than 1 million ETH (safety limit)
+        return amount > 0 and amount < Decimal('1000000')
+    except (ValueError, TypeError, InvalidOperation):
+        return False
+
+def validate_percentage(value: Union[str, int, float, Decimal]) -> bool:
+    """Validate percentage values (0-100)"""
+    try:
+        value = Decimal(str(value))
+        return value >= 0 and value <= 100
+    except (ValueError, TypeError, InvalidOperation):
+        return False
+
+def validate_positive_number(value: Union[str, int, float, Decimal]) -> bool:
+    """Validate positive numbers"""
+    try:
+        value = Decimal(str(value))
+        return value >= 0
+    except (ValueError, TypeError, InvalidOperation):
+        return False
+
+def safe_validate(func, *args, **kwargs):
+    """Safely execute validation function with error handling"""
+    try:
+        return func(*args, **kwargs)
+    except Exception as e:
+        logger.warning(f"Validation error in {func.__name__}: {e}")
+        return False
+
+def validate_trade_data(trade_data: dict) -> bool:
+    """Comprehensive validation of trade data"""
+    required_fields = ['from', 'to', 'token_in', 'token_out', 'amount_in']
+    
+    # Check required fields
+    for field in required_fields:
+        if field not in trade_data:
+            logger.warning(f"Missing required field: {field}")
+            return False
+    
+    # Validate addresses
+    if not validate_ethereum_address(trade_data['from']):
+        logger.warning(f"Invalid 'from' address: {trade_data['from']}")
+        return False
+    
+    if not validate_ethereum_address(trade_data['to']):
+        logger.warning(f"Invalid 'to' address: {trade_data['to']}")
+        return False
+    
+    # Validate amounts
+    if not validate_amount(trade_data['amount_in']):
+        logger.warning(f"Invalid amount_in: {trade_data['amount_in']}")
+        return False
+    
+    # Validate token data structure
+    if not isinstance(trade_data.get('token_in'), dict) or not isinstance(trade_data.get('token_out'), dict):
+        logger.warning("Invalid token data structure")
+        return False
+    
+    return True
+
+# ------------------ RATE LIMITING ------------------
+
+class RateLimiter:
+    """Rate limiter to prevent API abuse and manage request frequency"""
+    
+    def __init__(self, max_calls: int, time_window: int):
+        self.max_calls = max_calls
+        self.time_window = time_window
+        self.calls = defaultdict(list)
+        self.lock = threading.Lock()
+    
+    def can_make_call(self, key: str) -> bool:
+        """Check if a call can be made for the given key"""
+        with self.lock:
+            now = time.time()
+            # Remove old calls outside the time window
+            self.calls[key] = [call_time for call_time in self.calls[key] 
+                              if now - call_time < self.time_window]
+            
+            return len(self.calls[key]) < self.max_calls
+    
+    def record_call(self, key: str):
+        """Record a call for the given key"""
+        with self.lock:
+            self.calls[key].append(time.time())
+    
+    def get_remaining_calls(self, key: str) -> int:
+        """Get remaining calls for the given key"""
+        with self.lock:
+            now = time.time()
+            self.calls[key] = [call_time for call_time in self.calls[key] 
+                              if now - call_time < self.time_window]
+            return max(0, self.max_calls - len(self.calls[key]))
+
+# Rate limiters for different operations
+moralis_rate_limiter = RateLimiter(max_calls=100, time_window=3600)  # 100 calls per hour
+web3_rate_limiter = RateLimiter(max_calls=1000, time_window=60)     # 1000 calls per minute
+
+# ------------------ CACHING SYSTEM ------------------
+
+class TTLCache:
+    """Time-to-live cache for expensive operations"""
+    
+    def __init__(self, ttl_seconds: int = 300):
+        self.cache = {}
+        self.ttl = ttl_seconds
+        self.lock = threading.Lock()
+    
+    def get(self, key: str):
+        """Get value from cache if not expired"""
+        with self.lock:
+            if key in self.cache:
+                value, timestamp = self.cache[key]
+                if time.time() - timestamp < self.ttl:
+                    return value
+                else:
+                    del self.cache[key]
+            return None
+    
+    def set(self, key: str, value):
+        """Set value in cache with current timestamp"""
+        with self.lock:
+            self.cache[key] = (value, time.time())
+    
+    def clear(self):
+        """Clear all cached values"""
+        with self.lock:
+            self.cache.clear()
+    
+    def size(self):
+        """Get current cache size"""
+        with self.lock:
+            return len(self.cache)
+
+# Global caches
+token_cache = TTLCache(ttl_seconds=3600)  # 1 hour cache for token data
+price_cache = TTLCache(ttl_seconds=60)    # 1 minute cache for prices
+whale_cache = TTLCache(ttl_seconds=1800)  # 30 minute cache for whale data
 
 # ------------------ LOGGING SETUP ------------------
 logging.basicConfig(
@@ -316,30 +547,38 @@ balancer    = w3.eth.contract(address=BALANCER_VAULT, abi=BALANCER_ABI)
 
 # ------------------ TOKEN HANDLING ------------------
 
-# Cache for ERC20 contracts + metadata
-token_cache = {}
+# Legacy token cache (keeping for compatibility)
+legacy_token_cache = {}
 ERC20_ABI = load_abi("erc20")
 
 def get_token(address: str):
-    """Return cached token contract and metadata for an address."""
+    """Return cached token contract and metadata for an address with TTL caching."""
     addr = Web3.to_checksum_address(address)
 
-    if addr in token_cache:
-        return token_cache[addr]
+    # Check TTL cache first
+    cached_meta = token_cache.get(addr)
+    if cached_meta:
+        logger.debug(f"[Token] Cache hit for {addr}")
+        return cached_meta
 
     try:
         contract = w3.eth.contract(address=addr, abi=ERC20_ABI)
 
-        # Safe fetch metadata
+        # Safe fetch metadata with validation
         try:
             decimals = contract.functions.decimals().call()
-        except:
-            decimals = 18  # sane default
+            if not isinstance(decimals, int) or decimals < 0 or decimals > 77:
+                decimals = 18  # sane default
+        except Exception as e:
+            logger.warning(f"Failed to fetch decimals for {addr}: {e}")
+            decimals = 18
 
         try:
             symbol = contract.functions.symbol().call()
-        except:
-            # fallback: truncated address tag
+            if not isinstance(symbol, str) or len(symbol) > 20:
+                symbol = addr[:6] + "…" + addr[-4:]
+        except Exception as e:
+            logger.warning(f"Failed to fetch symbol for {addr}: {e}")
             symbol = addr[:6] + "…" + addr[-4:]
 
         meta = {
@@ -349,14 +588,17 @@ def get_token(address: str):
             "address": addr
         }
 
-        token_cache[addr] = meta
+        # Cache the result
+        token_cache.set(addr, meta)
         logger.debug(f"[Token] Cached {symbol} ({addr}) with {decimals} decimals")
 
         return meta
 
     except Exception as e:
         logger.error(f"Token init failed for {address}: {e}")
-        return {"contract": None, "decimals": 18, "symbol": "UNK", "address": addr}
+        fallback_meta = {"contract": None, "decimals": 18, "symbol": "UNK", "address": addr}
+        token_cache.set(addr, fallback_meta)
+        return fallback_meta
 
 def format_amount(raw_amount, decimals):
     """Convert raw onchain integer to human float."""
@@ -889,9 +1131,14 @@ def parse_swap(tx):
 
 def handle_whale_trade(parsed):
     """
-    Allocate + mirror whale trade.
+    Allocate + mirror whale trade with enhanced validation and error handling.
     Router type + fn_name are passed into decide_allocation.
     """
+    
+    # Validate trade data first
+    if not validate_trade_data(parsed):
+        logger.warning(f"[VALIDATION] Invalid trade data from {parsed.get('from', 'unknown')}")
+        return
 
     # Cull bad whales
     if not should_follow(parsed["from"]):
@@ -899,6 +1146,13 @@ def handle_whale_trade(parsed):
         return
 
     try:
+        # Rate limiting check
+        if not web3_rate_limiter.can_make_call("trade_execution"):
+            logger.warning("[RATE_LIMIT] Trade execution rate limited, skipping")
+            return
+        
+        web3_rate_limiter.record_call("trade_execution")
+
         # Allocation now aware of fn + router
         alloc_size = decide_allocation(
             token_in=parsed["token_in"],
@@ -915,29 +1169,41 @@ def handle_whale_trade(parsed):
             )
             return
 
+        # Validate allocation size
+        if not validate_amount(alloc_size):
+            logger.warning(f"[VALIDATION] Invalid allocation size: {alloc_size}")
+            return
+
         # Route by router address
         tx_hash = None
-        if parsed["to"] == UNISWAP_V2.lower():
+        router = parsed["to"]
+        
+        if router == UNISWAP_V2.lower():
             tx_hash = txmgr.execute_swap_v2(
                 parsed["token_in"], parsed["token_out"], alloc_size
             )
-        elif parsed["to"] == UNISWAP_V3.lower():
+        elif router == UNISWAP_V3.lower():
             tx_hash = txmgr.execute_swap_v3(
                 parsed["token_in"], parsed["token_out"], alloc_size
             )
         else:
-            logger.debug(f"[EXECUTE] Unsupported router: {parsed['to']}")
+            logger.debug(f"[EXECUTE] Unsupported router: {router}")
             return
 
-        logger.info(
-            f"[EXECUTE] Mirrored fn={parsed['fn_name']} on "
-            f"{'V2' if parsed['to']==UNISWAP_V2.lower() else 'V3'} | "
-            f"{parsed['token_in']['symbol']}→{parsed['token_out']['symbol']} "
-            f"| size={alloc_size} | tx={tx_hash.hex()}"
-        )
+        if tx_hash:
+            logger.info(
+                f"[EXECUTE] Mirrored fn={parsed['fn_name']} on "
+                f"{'V2' if router==UNISWAP_V2.lower() else 'V3'} | "
+                f"{parsed['token_in']['symbol']}→{parsed['token_out']['symbol']} "
+                f"| size={alloc_size} | tx={tx_hash.hex()}"
+            )
+        else:
+            logger.warning(f"[EXECUTE] Failed to execute trade for {parsed['from']}")
 
+    except ValidationError as e:
+        logger.error(f"[VALIDATION] Trade validation failed: {e}")
     except Exception as e:
-        logger.error(f"[TradeHandler] Execution failure: {e}")
+        logger.error(f"[TradeHandler] Execution failure: {e}", exc_info=True)
 
 
 def process_whale_tx(tx):

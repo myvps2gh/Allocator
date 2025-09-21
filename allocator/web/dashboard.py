@@ -1,0 +1,380 @@
+"""
+Web dashboard for Allocator AI
+"""
+
+import logging
+from flask import Flask, render_template_string, jsonify
+from typing import Dict, Any, List
+from decimal import Decimal
+
+logger = logging.getLogger(__name__)
+
+# Dashboard HTML template
+DASHBOARD_TEMPLATE = """
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Allocator AI - {{ mode }} Mode</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f8f9fa;
+            color: #333;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+        .mode-badge {
+            background: rgba(255,255,255,0.2);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .stat-card {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+            transition: transform 0.2s ease;
+        }
+        .stat-card:hover {
+            transform: translateY(-2px);
+        }
+        .stat-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .positive { color: #28a745; }
+        .negative { color: #dc3545; }
+        .neutral { color: #007bff; }
+        .stat-label {
+            color: #666;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .table-container {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+            margin-bottom: 30px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th {
+            background: #f8f9fa;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            color: #495057;
+            border-bottom: 2px solid #dee2e6;
+        }
+        td {
+            padding: 15px;
+            border-bottom: 1px solid #dee2e6;
+        }
+        tr:hover {
+            background-color: #f8f9fa;
+        }
+        .whale-row-profitable { background-color: rgba(40,167,69,0.05); }
+        .whale-row-medium { background-color: rgba(255,193,7,0.05); }
+        .whale-row-risky { background-color: rgba(220,53,69,0.05); }
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .status-online { background-color: #28a745; }
+        .status-offline { background-color: #dc3545; }
+        .refresh-btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .refresh-btn:hover {
+            background: #0056b3;
+        }
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                text-align: center;
+            }
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            table {
+                font-size: 0.9em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🐋 Allocator AI</h1>
+        <div>
+            <span class="mode-badge">{{ mode }} MODE</span>
+            <button class="refresh-btn" onclick="location.reload()">Refresh</button>
+        </div>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-label">Total PnL</div>
+            <div class="stat-value {{ 'positive' if total_pnl > 0 else 'negative' if total_pnl < 0 else 'neutral' }}">
+                {{ '%.4f' | format(total_pnl) }} ETH
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Active Capital</div>
+            <div class="stat-value neutral">{{ '%.4f' | format(capital) }} ETH</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Tracked Whales</div>
+            <div class="stat-value neutral">{{ whale_count }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Total Trades</div>
+            <div class="stat-value neutral">{{ trade_count }}</div>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <h2 style="margin: 0; padding: 20px; background: #f8f9fa; border-bottom: 1px solid #dee2e6;">Whale Performance</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Whale Address</th>
+                    <th>Cumulative PnL</th>
+                    <th>Risk Multiplier</th>
+                    <th>Allocation Size</th>
+                    <th>Trade Count</th>
+                    <th>Score</th>
+                    <th>Win Rate</th>
+                    <th>Moralis ROI%</th>
+                    <th>Moralis PnL $</th>
+                    <th>Moralis Trades</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for w in whales %}
+                <tr class="
+                    {% if w.moralis_roi is not none and w.moralis_roi >= 20 %}
+                        whale-row-profitable
+                    {% elif w.moralis_roi is not none and w.moralis_roi > 0 %}
+                        whale-row-medium
+                    {% else %}
+                        whale-row-risky
+                    {% endif %}
+                ">
+                    <td>
+                        <span class="status-indicator status-online"></span>
+                        {{ w.address[:6] }}...{{ w.address[-4:] }}
+                    </td>
+                    <td class="{{ 'positive' if w.pnl > 0 else 'negative' if w.pnl < 0 else 'neutral' }}">
+                        {{ '%.4f' | format(w.pnl) }}
+                    </td>
+                    <td>{{ '%.2f' | format(w.risk) }}x</td>
+                    <td>{{ '%.4f' | format(w.allocation) }} ETH</td>
+                    <td>{{ w.count }}</td>
+                    <td>{{ '%.4f' | format(w.score) }}</td>
+                    <td>{{ '%.0f' | format(w.winrate) }}%</td>
+                    <td>{% if w.moralis_roi is not none %}{{ '%.2f' | format(w.moralis_roi) }}%{% else %}N/A{% endif %}</td>
+                    <td>{% if w.moralis_profit_usd is not none %}{{ '%.2f' | format(w.moralis_profit_usd) }}${% else %}N/A{% endif %}</td>
+                    <td>{% if w.moralis_trades is not none %}{{ w.moralis_trades }}{% else %}N/A{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="table-container">
+        <h2 style="margin: 0; padding: 20px; background: #f8f9fa; border-bottom: 1px solid #dee2e6;">Recent Trades</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th>Actor</th>
+                    <th>Direction</th>
+                    <th>Amount In</th>
+                    <th>Amount Out</th>
+                    <th>PnL</th>
+                    <th>Mode</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for t in trades %}
+                <tr>
+                    <td>{{ t.timestamp }}</td>
+                    <td>{{ t.actor }}</td>
+                    <td>{{ t.token_in }} → {{ t.token_out }}</td>
+                    <td>{{ '%.4f' | format(t.amount_in) }}</td>
+                    <td>{{ '%.4f' | format(t.amount_out) }}</td>
+                    <td class="{{ 'positive' if t.pnl > 0 else 'negative' if t.pnl < 0 else 'neutral' }}">
+                        {{ '%.4f' | format(t.pnl) }}
+                    </td>
+                    <td>{{ t.mode }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        // Auto-refresh every 30 seconds
+        setTimeout(function() {
+            location.reload();
+        }, 30000);
+    </script>
+</body>
+</html>
+"""
+
+
+def create_app(whale_tracker, risk_manager, db_manager, mode: str = "LIVE") -> Flask:
+    """Create Flask application for the dashboard"""
+    
+    app = Flask(__name__)
+    
+    @app.route("/")
+    def index():
+        """Main dashboard page"""
+        try:
+            # Get whale data
+            whale_data = []
+            for whale_addr in whale_tracker.get_all_tracked_whales():
+                stats = whale_tracker.get_whale_stats(whale_addr)
+                risk_profile = risk_manager.get_whale_risk_profile(whale_addr)
+                
+                whale_data.append({
+                    "address": whale_addr,
+                    "pnl": float(risk_profile["pnl"]),
+                    "risk": float(risk_profile["risk_multiplier"]),
+                    "allocation": float(risk_profile["pnl"] * 0.1),  # Simplified
+                    "count": stats.trades if stats else 0,
+                    "score": float(stats.score) if stats else 0,
+                    "winrate": float(stats.win_rate * 100) if stats else 0,
+                    "moralis_roi": float(stats.moralis_roi_pct) if stats and stats.moralis_roi_pct else None,
+                    "moralis_profit_usd": float(stats.moralis_profit_usd) if stats and stats.moralis_profit_usd else None,
+                    "moralis_trades": stats.moralis_trades if stats else None
+                })
+            
+            # Sort by PnL
+            whale_data.sort(key=lambda x: x["pnl"], reverse=True)
+            
+            # Get recent trades
+            recent_trades = db_manager.get_recent_trades(20)
+            trades_data = []
+            for trade in recent_trades:
+                trades_data.append({
+                    "timestamp": trade[1],  # timestamp column
+                    "actor": trade[2],      # actor column
+                    "token_in": trade[8],   # token_in column
+                    "token_out": trade[9],  # token_out column
+                    "amount_in": trade[6],  # amount_in column
+                    "amount_out": trade[7], # amount_out column
+                    "pnl": trade[12],       # pnl column
+                    "mode": trade[15]       # mode column
+                })
+            
+            # Get stats
+            stats = db_manager.get_stats()
+            
+            return render_template_string(
+                DASHBOARD_TEMPLATE,
+                whales=whale_data,
+                trades=trades_data,
+                total_pnl=stats["total_pnl"],
+                capital=2000,  # This should come from config
+                whale_count=len(whale_data),
+                trade_count=stats["trade_count"],
+                mode=mode
+            )
+            
+        except Exception as e:
+            logger.error(f"Dashboard error: {e}")
+            return f"Dashboard error: {e}", 500
+    
+    @app.route("/api/stats")
+    def api_stats():
+        """API endpoint for stats"""
+        try:
+            stats = db_manager.get_stats()
+            return jsonify({
+                "total_pnl": stats["total_pnl"],
+                "whale_count": stats["whale_count"],
+                "trade_count": stats["trade_count"],
+                "mode": mode
+            })
+        except Exception as e:
+            logger.error(f"API stats error: {e}")
+            return jsonify({"error": str(e)}), 500
+    
+    @app.route("/api/whales")
+    def api_whales():
+        """API endpoint for whale data"""
+        try:
+            whale_data = []
+            for whale_addr in whale_tracker.get_all_tracked_whales():
+                stats = whale_tracker.get_whale_stats(whale_addr)
+                risk_profile = risk_manager.get_whale_risk_profile(whale_addr)
+                
+                whale_data.append({
+                    "address": whale_addr,
+                    "pnl": float(risk_profile["pnl"]),
+                    "risk_multiplier": float(risk_profile["risk_multiplier"]),
+                    "score": float(stats.score) if stats else 0,
+                    "win_rate": float(stats.win_rate) if stats else 0,
+                    "trades": stats.trades if stats else 0
+                })
+            
+            return jsonify(whale_data)
+        except Exception as e:
+            logger.error(f"API whales error: {e}")
+            return jsonify({"error": str(e)}), 500
+    
+    @app.route("/health")
+    def health():
+        """Health check endpoint"""
+        return jsonify({
+            "status": "healthy",
+            "mode": mode,
+            "whales_tracked": len(whale_tracker.get_all_tracked_whales())
+        })
+    
+    return app

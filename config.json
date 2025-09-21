@@ -1,0 +1,13 @@
+{
+  "web3_rpc": "ws://152.53.148.57:8546",
+  "keystore_path": "wallet.json",
+  "tracked_whales": [],
+  "capital": 2,
+  "base_risk": 0.05,
+  "max_slippage": 0.01,
+  "min_profit": 0.005,
+  "gas_boost": 1.1,
+  "min_moralis_roi_pct": 5,
+  "min_moralis_profit_usd": 500,
+  "min_moralis_trades": 5
+}
