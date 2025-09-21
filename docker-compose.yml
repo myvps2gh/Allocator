@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  allocator-ai:
+    build: .
+    container_name: allocator-ai
+    restart: unless-stopped
+    environment:
+      - MORALIS_API_KEY=${MORALIS_API_KEY}
+      - WALLET_PASS=${WALLET_PASS}
+    volumes:
+      - ./wallet.json:/app/wallet.json:ro
+      - ./logs:/app/logs
+      - ./whales.db:/app/whales.db
+    ports:
+      - "8080:8080"
+    networks:
+      - allocator-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  allocator-network:
+    driver: bridge
