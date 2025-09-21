@@ -175,6 +175,43 @@ DASHBOARD_TEMPLATE = """
     </div>
 
     <div class="table-container">
+        <h2 style="margin: 0; padding: 20px; background: #f8f9fa; border-bottom: 1px solid #dee2e6;">Discovery Status</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Mode</th>
+                    <th>Status</th>
+                    <th>Blocks to Scan</th>
+                    <th>Min Trades</th>
+                    <th>Min PnL Threshold</th>
+                    <th>Candidates Found</th>
+                    <th>Validated Whales</th>
+                    <th>Last Run Time</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for discovery in discovery_status %}
+                <tr>
+                    <td><strong>{{ discovery.mode }}</strong></td>
+                    <td>
+                        <span class="status-indicator {{ 'status-online' if discovery.status == 'running' else 'status-idle' if discovery.status == 'completed' else 'status-offline' }}"></span>
+                        {{ discovery.status.title() }}
+                    </td>
+                    <td>{{ '{:,}'.format(discovery.blocks_back) }}</td>
+                    <td>{{ discovery.min_trades }}</td>
+                    <td>{{ discovery.min_pnl_threshold }} ETH</td>
+                    <td class="neutral">{{ discovery.candidates_found if discovery.candidates_found is not none else 'N/A' }}</td>
+                    <td class="{{ 'positive' if discovery.validated_whales and discovery.validated_whales > 0 else 'neutral' }}">
+                        {{ discovery.validated_whales if discovery.validated_whales is not none else 'N/A' }}
+                    </td>
+                    <td>{{ discovery.last_run_duration if discovery.last_run_duration else 'N/A' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="table-container">
         <h2 style="margin: 0; padding: 20px; background: #f8f9fa; border-bottom: 1px solid #dee2e6;">Whale Performance</h2>
         <table>
             <thead>
@@ -315,10 +352,27 @@ def create_app(whale_tracker, risk_manager, db_manager, mode: str = "LIVE") -> F
             # Get stats
             stats = db_manager.get_stats()
             
+            # Get discovery status
+            discovery_status = []
+            if hasattr(whale_tracker, 'discovery_modes') and whale_tracker.discovery_modes:
+                for mode_name, config in whale_tracker.discovery_modes.items():
+                    # Check if this mode is in the active discovery list
+                    discovery_status.append({
+                        "mode": mode_name,
+                        "status": "idle",  # We'll enhance this later with real-time status
+                        "blocks_back": config.get("blocks_back", 0),
+                        "min_trades": config.get("min_trades", 0),
+                        "min_pnl_threshold": config.get("min_pnl_threshold", 0),
+                        "candidates_found": None,
+                        "validated_whales": None,
+                        "last_run_duration": None
+                    })
+            
             return render_template_string(
                 DASHBOARD_TEMPLATE,
                 whales=whale_data,
                 trades=trades_data,
+                discovery_status=discovery_status,
                 total_pnl=stats["total_pnl"],
                 capital=2000,  # This should come from config
                 whale_count=len(whale_data),

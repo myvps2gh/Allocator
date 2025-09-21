@@ -294,9 +294,17 @@ class WhaleTracker:
         # Track candidate statistics
         candidate_stats = defaultdict(lambda: {"profit": Decimal(0), "trades": 0})
         
-        # Scan blocks for whale candidates
-        for block_num in range(start_block, end_block + 1):
+        # Scan blocks for whale candidates with progress logging
+        total_blocks = end_block - start_block + 1
+        logger.info(f"Scanning {total_blocks} blocks from {start_block} to {end_block}")
+        
+        for i, block_num in enumerate(range(start_block, end_block + 1)):
             try:
+                # Progress logging every 500 blocks
+                if i % 500 == 0 and i > 0:
+                    progress = (i / total_blocks) * 100
+                    logger.info(f"Mode {mode}: {progress:.1f}% complete ({i}/{total_blocks} blocks)")
+                
                 block = w3.eth.get_block(block_num, full_transactions=True)
                 
                 for tx in block.transactions:
@@ -312,6 +320,8 @@ class WhaleTracker:
             except Exception as e:
                 logger.debug(f"Failed to process block {block_num}: {e}")
                 continue
+        
+        logger.info(f"Completed scanning {total_blocks} blocks")
         
         # Filter candidates
         new_whales = []
