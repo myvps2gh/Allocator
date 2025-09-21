@@ -265,26 +265,31 @@ class AllocatorAI:
                                 logger.error(f"Discovery mode {mode} exception: {e}")
                                 all_candidates[mode] = []
                     
-                    # Now validate all discovered candidates with Moralis
-                    total_validated = 0
-                    for mode, candidates in all_candidates.items():
-                        logger.info(f"Validating {len(candidates)} candidates from {mode} with Moralis...")
+                    # Validate discovered candidates with Moralis (unless in DRY_RUN_WO_MOR mode)
+                    if self.mode == "DRY_RUN_WO_MOR":
+                        logger.info("DRY_RUN_WO_MOR mode: Skipping Moralis validation to preserve CU")
+                        total_candidates = sum(len(candidates) for candidates in all_candidates.values())
+                        logger.info(f"Discovery round completed. Total candidates found: {total_candidates} (not validated)")
+                    else:
+                        total_validated = 0
+                        for mode, candidates in all_candidates.items():
+                            logger.info(f"Validating {len(candidates)} candidates from {mode} with Moralis...")
+                            
+                            validated_count = 0
+                            for whale_address in candidates:
+                                # Check Moralis PnL to see if whale is worth tracking
+                                if self.whale_tracker.bootstrap_whale_from_moralis(
+                                    whale_address,
+                                    min_roi_pct=self.config.trading.min_moralis_roi_pct,
+                                    min_profit_usd=self.config.trading.min_moralis_profit_usd,
+                                    min_trades=self.config.trading.min_moralis_trades
+                                ):
+                                    validated_count += 1
+                            
+                            logger.info(f"Mode {mode}: {validated_count}/{len(candidates)} whales validated by Moralis")
+                            total_validated += validated_count
                         
-                        validated_count = 0
-                        for whale_address in candidates:
-                            # Check Moralis PnL to see if whale is worth tracking
-                            if self.whale_tracker.bootstrap_whale_from_moralis(
-                                whale_address,
-                                min_roi_pct=self.config.trading.min_moralis_roi_pct,
-                                min_profit_usd=self.config.trading.min_moralis_profit_usd,
-                                min_trades=self.config.trading.min_moralis_trades
-                            ):
-                                validated_count += 1
-                        
-                        logger.info(f"Mode {mode}: {validated_count}/{len(candidates)} whales validated by Moralis")
-                        total_validated += validated_count
-                    
-                    logger.info(f"Discovery round completed. Total validated whales: {total_validated}")
+                        logger.info(f"Discovery round completed. Total validated whales: {total_validated}")
                     
                     # Wait before next discovery round
                     time.sleep(self.config.discovery.refresh_interval)
@@ -301,7 +306,7 @@ class AllocatorAI:
         """Start mempool monitoring"""
         if self.mempool_watcher:
             # Determine mempool usage based on mode
-            use_mempool = self.mode in ["LIVE", "DRY_RUN", "TEST"]
+            use_mempool = self.mode in ["LIVE", "DRY_RUN", "DRY_RUN_WO_MOR", "TEST"]
             self.mempool_watcher.start_watching(use_mempool=use_mempool)
             
             monitoring_type = "mempool" if use_mempool else "block"
@@ -364,8 +369,8 @@ class AllocatorAI:
 def main():
     """Main entry point"""
     parser = argparse.ArgumentParser(description="Allocator AI - Whale Following Trading Bot")
-    parser.add_argument("--mode", choices=["LIVE", "DRY_RUN", "DRY_RUN_MEMPOOLHACK", "TEST"], default="TEST",
-                       help="Operation mode")
+    parser.add_argument("--mode", choices=["LIVE", "DRY_RUN", "DRY_RUN_WO_MOR", "DRY_RUN_MEMPOOLHACK", "TEST"], default="TEST",
+                       help="Operation mode: LIVE (real trading), DRY_RUN (simulate with Moralis), DRY_RUN_WO_MOR (simulate without Moralis to save CU), DRY_RUN_MEMPOOLHACK (block monitoring), TEST (basic test)")
     parser.add_argument("--config", default="config.json", help="Configuration file")
     parser.add_argument("--no-mempool", action="store_true", help="Use block monitoring instead of mempool")
     
