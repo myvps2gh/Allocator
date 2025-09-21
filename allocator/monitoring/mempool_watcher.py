@@ -36,12 +36,20 @@ class MempoolWatcher:
         
     def start_watching(self, use_mempool: bool = True) -> None:
         """Start watching for whale transactions"""
+        import threading
+        
         self.is_running = True
         
-        if use_mempool:
-            self._watch_mempool()
-        else:
-            self._watch_blocks()
+        def watch_worker():
+            if use_mempool:
+                self._watch_mempool()
+            else:
+                self._watch_blocks()
+        
+        # Run monitoring in background thread
+        watch_thread = threading.Thread(target=watch_worker, daemon=True)
+        watch_thread.start()
+        logger.info(f"Started {'mempool' if use_mempool else 'block'} monitoring in background thread")
     
     def stop_watching(self) -> None:
         """Stop watching"""
