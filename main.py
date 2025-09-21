@@ -124,16 +124,22 @@ class AllocatorAI:
             raise
     
     def setup_monitoring(self):
-        """Setup mempool monitoring"""
+        """Setup mempool monitoring with separate WebSocket connection"""
+        from allocator.utils.web3_utils import Web3Manager
+        
         tracked_whales = set(self.config.tracked_whales)
         
+        # Create separate WebSocket connection for mempool monitoring
+        # to avoid conflicts with discovery process
+        mempool_web3 = Web3Manager(self.config.web3.rpc_url)
+        
         self.mempool_watcher = MempoolWatcher(
-            self.web3_manager.w3,
+            mempool_web3.w3,
             tracked_whales,
             self.handle_whale_trade
         )
         
-        logger.info(f"Setup monitoring for {len(tracked_whales)} whales")
+        logger.info(f"Setup monitoring for {len(tracked_whales)} whales with separate WebSocket connection")
     
     def handle_whale_trade(self, trade_data: dict):
         """Handle incoming whale trade"""
