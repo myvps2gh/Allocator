@@ -315,22 +315,28 @@ class AllocatorAI:
     
     def start_dashboard(self, host: str = "0.0.0.0", port: int = 8080):
         """Start web dashboard"""
-        app = create_app(
-            self.whale_tracker,
-            self.risk_manager,
-            self.db_manager,
-            self.mode
-        )
-        
-        def run_dashboard():
-            try:
-                app.run(host=host, port=port, debug=False, use_reloader=False)
-            except Exception as e:
-                logger.error(f"Dashboard error: {e}")
-        
-        dashboard_thread = threading.Thread(target=run_dashboard, daemon=True)
-        dashboard_thread.start()
-        logger.info(f"Started dashboard on http://{host}:{port}")
+        try:
+            logger.info("Attempting to start dashboard...")
+            app = create_app(
+                self.whale_tracker,
+                self.risk_manager,
+                self.db_manager,
+                self.mode
+            )
+            logger.info("Dashboard app created successfully")
+            
+            def run_dashboard():
+                try:
+                    logger.info(f"Starting Flask app on {host}:{port}")
+                    app.run(host=host, port=port, debug=False, use_reloader=False)
+                except Exception as e:
+                    logger.error(f"Dashboard runtime error: {e}", exc_info=True)
+            
+            dashboard_thread = threading.Thread(target=run_dashboard, daemon=True)
+            dashboard_thread.start()
+            logger.info(f"Started dashboard on http://{host}:{port}")
+        except Exception as e:
+            logger.error(f"Failed to start dashboard: {e}", exc_info=True)
     
     def run(self, mode: str = "LIVE", use_mempool: bool = True):
         """Run the Allocator AI system"""
