@@ -633,6 +633,9 @@ class WhaleTracker:
         total_pnl = 0
         
         for token_symbol, token_address, cumulative_pnl, trade_count, last_updated in token_breakdown:
+            # Skip the PROCESSED marker token
+            if token_symbol == "PROCESSED":
+                continue
             if cumulative_pnl > 0:  # Only count profitable tokens for concentration calc
                 pnl_by_token[token_symbol] = cumulative_pnl
                 total_pnl += cumulative_pnl
@@ -720,11 +723,14 @@ class WhaleTracker:
         """Fetch real token-level data from Moralis for existing whales"""
         whale_address = whale_address.lower()
         
-        # Check if whale already has token data
+        # Check if whale already has token data (including "PROCESSED" marker)
         existing_tokens = self.db.get_whale_token_breakdown(whale_address)
         if existing_tokens:
-            logger.debug(f"Whale {whale_address} already has {len(existing_tokens)} token records")
-            return
+            # Filter out the PROCESSED marker for counting
+            real_tokens = [t for t in existing_tokens if t[0] != "PROCESSED"]
+            if real_tokens or any(t[0] == "PROCESSED" for t in existing_tokens):
+                logger.debug(f"Whale {whale_address} already processed ({len(real_tokens)} real tokens)")
+                return
         
         logger.info(f"Fetching token-level data from Moralis for whale {whale_address}")
         
@@ -857,9 +863,8 @@ class WhaleTracker:
                            f"{tokens_added} tokens, {total_estimated_pnl:.4f} ETH total estimated PnL")
             else:
                 logger.info(f"No meaningful token activity found for whale {whale_address}")
-                
-            # Cache the result
-            self.cache.set('moralis_tokens', whale_address, {"tokens": tokens_added}, ttl=86400)
+                # Even if no tokens found, mark as processed by adding a dummy record
+                self.db.update_whale_token_pnl(whale_address, "PROCESSED", 0.0, "0x0")
             
         except Exception as e:
             logger.error(f"Error fetching token data from Moralis for {whale_address}: {e}")

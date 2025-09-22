@@ -434,6 +434,9 @@ def create_app(whale_tracker, risk_manager, db_manager, mode: str = "LIVE") -> F
                     token_breakdown = db_manager.get_whale_token_breakdown(whale_row[0])
                     tokens_data = []
                     for token_symbol, token_address, token_pnl, trade_count, last_updated in token_breakdown:
+                        # Skip the PROCESSED marker token
+                        if token_symbol == "PROCESSED":
+                            continue
                         tokens_data.append({
                             "symbol": token_symbol,
                             "address": token_address,
