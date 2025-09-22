@@ -363,7 +363,7 @@ class WhaleTracker:
                 self.adaptive_engine = AdaptiveDiscoveryEngine(w3, self.market_analyzer)
             
             # Get adaptive configuration
-            percentile_config = adaptive_config.get("percentile_mode", {})
+            percentile_config = getattr(adaptive_config, "percentile_mode", {}) or {}
             
             if not percentile_config.get("enabled", False):
                 logger.info("Adaptive percentile discovery is disabled")

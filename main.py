@@ -307,8 +307,8 @@ class AllocatorAI:
                     discovery_modes = list(self.config.discovery.modes)
                     
                     # Add adaptive discovery mode if enabled
-                    adaptive_config = getattr(self.config.discovery, 'adaptive_discovery', {})
-                    if adaptive_config.get('enabled', False):
+                    adaptive_config = getattr(self.config.discovery, 'adaptive_discovery', None)
+                    if adaptive_config and getattr(adaptive_config, 'enabled', False):
                         discovery_modes.append('adaptive_percentile')
                     
                     logger.info(f"Starting PARALLEL discovery for modes: {discovery_modes}")
@@ -373,7 +373,10 @@ class AllocatorAI:
             start_time = time.time()
             
             # Get adaptive configuration
-            adaptive_config = getattr(self.config.discovery, 'adaptive_discovery', {})
+            adaptive_config = getattr(self.config.discovery, 'adaptive_discovery', None)
+            if not adaptive_config:
+                logger.warning("Adaptive discovery config not found")
+                return "adaptive_percentile", []
             
             # Get candidates using adaptive discovery
             candidate_whales = self.whale_tracker.discover_whales_adaptive(
