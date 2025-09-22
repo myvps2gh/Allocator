@@ -106,10 +106,27 @@ class DatabaseManager:
         )
         """)
         
+        # Create whale_token_pnl table for token-level performance tracking
+        self.conn.execute("""
+        CREATE TABLE IF NOT EXISTS whale_token_pnl (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            whale_address TEXT NOT NULL,
+            token_symbol TEXT NOT NULL,
+            token_address TEXT,
+            cumulative_pnl REAL DEFAULT 0.0,
+            trade_count INTEGER DEFAULT 0,
+            last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(whale_address, token_symbol),
+            FOREIGN KEY (whale_address) REFERENCES whales (address)
+        )
+        """)
+        
         # Create indexes for better performance
         self.conn.execute("CREATE INDEX IF NOT EXISTS idx_trades_whale ON trades(whale_address)")
         self.conn.execute("CREATE INDEX IF NOT EXISTS idx_trades_timestamp ON trades(timestamp)")
         self.conn.execute("CREATE INDEX IF NOT EXISTS idx_trades_actor ON trades(actor)")
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_whale_token_pnl_whale ON whale_token_pnl(whale_address)")
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_whale_token_pnl_symbol ON whale_token_pnl(token_symbol)")
         
         self.conn.commit()
     
@@ -235,6 +252,44 @@ class DatabaseManager:
             except sqlite3.Error as e:
                 logger.error(f"Database error updating whale performance {addr}: {e}")
                 return False
+    
+    def update_whale_token_pnl(self, whale_address: str, token_symbol: str, 
+                              pnl_change: float, token_address: str = None) -> bool:
+        """Update token-level PnL for a whale"""
+        with self.lock:
+            try:
+                self.conn.execute("""
+                    INSERT OR REPLACE INTO whale_token_pnl 
+                    (whale_address, token_symbol, token_address, cumulative_pnl, trade_count, last_updated)
+                    VALUES (?, ?, ?, 
+                        COALESCE((SELECT cumulative_pnl FROM whale_token_pnl 
+                                WHERE whale_address=? AND token_symbol=?), 0) + ?,
+                        COALESCE((SELECT trade_count FROM whale_token_pnl 
+                                WHERE whale_address=? AND token_symbol=?), 0) + 1,
+                        ?)
+                """, (whale_address.lower(), token_symbol, token_address, 
+                      whale_address.lower(), token_symbol, float(pnl_change),
+                      whale_address.lower(), token_symbol, int(time.time())))
+                self.conn.commit()
+                return True
+            except sqlite3.Error as e:
+                logger.error(f"Database error updating whale token PnL {whale_address}-{token_symbol}: {e}")
+                return False
+    
+    def get_whale_token_breakdown(self, whale_address: str) -> List[Tuple]:
+        """Get token-level PnL breakdown for a whale"""
+        with self.lock:
+            try:
+                cursor = self.conn.execute("""
+                    SELECT token_symbol, token_address, cumulative_pnl, trade_count, last_updated
+                    FROM whale_token_pnl 
+                    WHERE whale_address=? 
+                    ORDER BY cumulative_pnl DESC
+                """, (whale_address.lower(),))
+                return cursor.fetchall()
+            except sqlite3.Error as e:
+                logger.error(f"Database error getting whale token breakdown {whale_address}: {e}")
+                return []
     
     def save_trade(self, trade_data: dict) -> bool:
         """Save trade data to database"""

@@ -493,6 +493,8 @@ def main():
                        help="Refresh metrics for all tracked whales and exit")
     parser.add_argument("--simulate-trades", action="store_true",
                        help="Include trade simulation when refreshing whale metrics")
+    parser.add_argument("--recalc-scores", action="store_true",
+                       help="Recalculate all whale scores using Score Formula v2.0 and exit")
     
     args = parser.parse_args()
     
@@ -505,6 +507,30 @@ def main():
             logger.info("Refreshing whale metrics...")
             allocator.whale_tracker.refresh_all_whale_metrics(simulate_trades=args.simulate_trades)
             logger.info("Whale metrics refresh completed!")
+            return
+        
+        # Handle score recalculation command
+        if args.recalc_scores:
+            logger.info("Recalculating all whale scores using Score Formula v2.0...")
+            
+            # Load existing whales from database
+            db_whales = allocator.db_manager.get_all_whales()
+            for whale_data in db_whales:
+                allocator.whale_tracker.tracked_whales.add(whale_data[0])
+            
+            # Recalculate scores for all whales
+            updated_count = 0
+            for whale_address in allocator.whale_tracker.tracked_whales:
+                try:
+                    new_score = allocator.whale_tracker.calculate_score_v2(whale_address)
+                    if new_score > 0:
+                        allocator.db_manager.update_whale_performance(whale_address, score=new_score)
+                        updated_count += 1
+                        logger.info(f"Updated {whale_address}: Score v2.0 = {new_score:.2f}")
+                except Exception as e:
+                    logger.error(f"Error recalculating score for {whale_address}: {e}")
+            
+            logger.info(f"Score recalculation completed! Updated {updated_count} whales.")
             return
         
         allocator.run(mode=args.mode, use_mempool=not args.no_mempool)

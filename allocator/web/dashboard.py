@@ -130,6 +130,38 @@ DASHBOARD_TEMPLATE = """
         .refresh-btn:hover {
             background: #0056b3;
         }
+        .btn-expand {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .btn-expand:hover {
+            background: #1e7e34;
+        }
+        .token-breakdown {
+            background-color: #f8f9fa;
+        }
+        .token-details {
+            padding: 20px;
+        }
+        .token-table {
+            width: 100%;
+            margin-top: 10px;
+            font-size: 0.9em;
+        }
+        .token-table th {
+            background: #e9ecef;
+            padding: 8px;
+            font-size: 0.8em;
+        }
+        .token-table td {
+            padding: 8px;
+            border-bottom: 1px solid #dee2e6;
+        }
         @media (max-width: 768px) {
             .header {
                 flex-direction: column;
@@ -221,11 +253,12 @@ DASHBOARD_TEMPLATE = """
                     <th>Risk Multiplier</th>
                     <th>Allocation Size</th>
                     <th>Trade Count</th>
-                    <th>Score</th>
+                    <th>Score v2.0</th>
                     <th>Win Rate</th>
                     <th>Moralis ROI%</th>
                     <th>Moralis PnL $</th>
-                    <th>Moralis Trades</th>
+                    <th>Tokens</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -249,11 +282,52 @@ DASHBOARD_TEMPLATE = """
                     <td>{{ '%.2f' | format(w.risk) }}x</td>
                     <td>{{ '%.4f' | format(w.allocation) }} ETH</td>
                     <td>{{ w.count }}</td>
-                    <td>{{ '%.4f' | format(w.score) }}</td>
+                    <td><strong>{{ '%.2f' | format(w.score) }}</strong></td>
                     <td>{{ '%.0f' | format(w.winrate) }}%</td>
                     <td>{% if w.moralis_roi is not none %}{{ '%.2f' | format(w.moralis_roi) }}%{% else %}N/A{% endif %}</td>
                     <td>{% if w.moralis_profit_usd is not none %}{{ '%.2f' | format(w.moralis_profit_usd) }}${% else %}N/A{% endif %}</td>
-                    <td>{% if w.moralis_trades is not none %}{{ w.moralis_trades }}{% else %}N/A{% endif %}</td>
+                    <td>{{ w.tokens|length }} tokens</td>
+                    <td><button class="btn-expand" onclick="toggleTokens('{{ w.address }}')">Show Tokens</button></td>
+                </tr>
+                <!-- Token breakdown row (hidden by default) -->
+                <tr id="tokens-{{ w.address }}" class="token-breakdown" style="display: none;">
+                    <td colspan="11">
+                        <div class="token-details">
+                            <h4>Token Breakdown for {{ w.address[:6] }}...{{ w.address[-4:] }}</h4>
+                            {% if w.tokens %}
+                            <table class="token-table">
+                                <thead>
+                                    <tr>
+                                        <th>Token</th>
+                                        <th>PnL (ETH)</th>
+                                        <th>Trades</th>
+                                        <th>Weight</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for token in w.tokens %}
+                                    <tr>
+                                        <td><strong>{{ token.symbol }}</strong></td>
+                                        <td class="{{ 'positive' if token.pnl > 0 else 'negative' if token.pnl < 0 else 'neutral' }}">
+                                            {{ '%.4f' | format(token.pnl) }}
+                                        </td>
+                                        <td>{{ token.trades }}</td>
+                                        <td>
+                                            {% if w.pnl > 0 %}
+                                                {{ '%.1f' | format((token.pnl / w.pnl) * 100) }}%
+                                            {% else %}
+                                                N/A
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                            {% else %}
+                            <p>No token-level data available yet.</p>
+                            {% endif %}
+                        </div>
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -297,6 +371,22 @@ DASHBOARD_TEMPLATE = """
         setTimeout(function() {
             location.reload();
         }, 30000);
+        
+        // Toggle token breakdown display
+        function toggleTokens(whaleAddress) {
+            const row = document.getElementById('tokens-' + whaleAddress);
+            const button = event.target;
+            
+            if (row.style.display === 'none') {
+                row.style.display = 'table-row';
+                button.textContent = 'Hide Tokens';
+                button.style.background = '#dc3545';
+            } else {
+                row.style.display = 'none';
+                button.textContent = 'Show Tokens';
+                button.style.background = '#28a745';
+            }
+        }
     </script>
 </body>
 </html>
@@ -338,6 +428,17 @@ def create_app(whale_tracker, risk_manager, db_manager, mode: str = "LIVE") -> F
                         except (ValueError, TypeError):
                             return default
                     
+                    # Get token breakdown for this whale
+                    token_breakdown = db_manager.get_whale_token_breakdown(whale_row[0])
+                    tokens_data = []
+                    for token_symbol, token_address, token_pnl, trade_count, last_updated in token_breakdown:
+                        tokens_data.append({
+                            "symbol": token_symbol,
+                            "address": token_address,
+                            "pnl": safe_float(token_pnl),
+                            "trades": safe_int(trade_count)
+                        })
+                    
                     whale_data.append({
                         "address": whale_row[0] if whale_row[0] is not None else "unknown",  # address
                         "pnl": safe_float(whale_row[4]),  # cumulative_pnl
@@ -350,7 +451,8 @@ def create_app(whale_tracker, risk_manager, db_manager, mode: str = "LIVE") -> F
                         "moralis_profit_usd": safe_float(whale_row[2]) if whale_row[2] is not None else None,  # roi_usd
                         "moralis_trades": safe_int(whale_row[3]) if whale_row[3] is not None else None,  # trades (same as count)
                         "bootstrap_time": whale_row[9] if whale_row[9] is not None else None,  # bootstrap_time
-                        "last_refresh": whale_row[10] if whale_row[10] is not None else None  # last_refresh
+                        "last_refresh": whale_row[10] if whale_row[10] is not None else None,  # last_refresh
+                        "tokens": tokens_data  # Token breakdown
                     })
                 except Exception as e:
                     logger.warning(f"Error processing whale row {whale_row}: {e}")

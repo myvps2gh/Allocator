@@ -5,6 +5,7 @@ Whale tracking and scoring system for Allocator AI
 import time
 import logging
 import requests
+import math
 from decimal import Decimal
 from collections import defaultdict, deque
 from typing import Dict, List, Optional, Tuple
@@ -499,6 +500,9 @@ class WhaleTracker:
         
         logger.info(f"Simulating {num_trades} trades for whale {whale_address}")
         
+        # Common tokens to simulate trading
+        tokens = ["ETH", "WBTC", "USDC", "LINK", "UNI", "AAVE", "PEPE", "SHIB", "DOGE"]
+        
         for i in range(num_trades):
             # Generate random PnL based on whale's Moralis performance
             whale_stats = self.whale_scores.get(whale_address)
@@ -506,13 +510,19 @@ class WhaleTracker:
                 # Base PnL on historical performance with some randomness
                 base_performance = float(whale_stats.moralis_roi_pct) / 100
                 random_factor = random.uniform(0.5, 1.5)
-                simulated_pnl = Decimal(str(base_performance * random_factor * random.uniform(0.1, 2.0)))
+                simulated_pnl = base_performance * random_factor * random.uniform(0.1, 2.0)
             else:
                 # Random PnL between -1 and +2 ETH
-                simulated_pnl = Decimal(str(random.uniform(-1.0, 2.0)))
+                simulated_pnl = random.uniform(-1.0, 2.0)
             
-            # Update whale score with simulated trade
-            self.update_whale_score(whale_address, simulated_pnl)
+            # Pick a random token for this trade
+            token = random.choice(tokens)
+            
+            # Update token-level PnL (this will also recalculate Score v2.0)
+            self.update_whale_token_trade(whale_address, token, simulated_pnl)
+            
+            # Also update the traditional whale score for backward compatibility
+            self.update_whale_score(whale_address, Decimal(str(simulated_pnl)))
             
         logger.info(f"Completed simulation for whale {whale_address}")
     
@@ -606,3 +616,103 @@ class WhaleTracker:
                 logger.error(f"Error refreshing whale {whale_address}: {e}")
         
         logger.info("Completed refreshing whale metrics")
+    
+    def calculate_diversity_factor(self, whale_address: str) -> float:
+        """Calculate diversity factor based on token concentration (0=concentrated, 1=diverse)"""
+        whale_address = whale_address.lower()
+        
+        # Get token breakdown from database
+        token_breakdown = self.db.get_whale_token_breakdown(whale_address)
+        
+        if not token_breakdown or len(token_breakdown) < 2:
+            # Only 1 token or no data = maximum concentration penalty
+            return 0.1
+        
+        # Build pnl_by_token dict
+        pnl_by_token = {}
+        total_pnl = 0
+        
+        for token_symbol, token_address, cumulative_pnl, trade_count, last_updated in token_breakdown:
+            if cumulative_pnl > 0:  # Only count profitable tokens for concentration calc
+                pnl_by_token[token_symbol] = cumulative_pnl
+                total_pnl += cumulative_pnl
+        
+        if total_pnl <= 0 or len(pnl_by_token) == 0:
+            return 0.1  # No profitable tokens = max penalty
+        
+        # Calculate Herfindahl-Hirschman Index (HHI)
+        concentration = 0
+        for token_pnl in pnl_by_token.values():
+            weight = token_pnl / total_pnl
+            concentration += weight ** 2
+        
+        # Diversity factor = 1 - concentration
+        diversity_factor = 1 - concentration
+        
+        # Cap at 0.6 as "solidly diverse" as mentioned
+        diversity_factor = min(diversity_factor, 0.6)
+        
+        logger.debug(f"Whale {whale_address} diversity: {len(pnl_by_token)} tokens, "
+                    f"concentration={concentration:.3f}, diversity_factor={diversity_factor:.3f}")
+        
+        return diversity_factor
+    
+    def calculate_score_v2(self, whale_address: str) -> float:
+        """Calculate Score Formula 2.0 with diversity penalty"""
+        whale_address = whale_address.lower()
+        
+        # Get current whale stats
+        whale_stats = self.get_whale_stats(whale_address)
+        if not whale_stats:
+            return 0.0
+        
+        # Get whale data from database for additional metrics
+        whale_data = self.db.get_whale(whale_address)
+        if not whale_data:
+            return 0.0
+        
+        # Extract metrics
+        roi_pct = float(whale_data[1]) if whale_data[1] is not None else 0  # moralis_roi_pct
+        win_rate = float(whale_stats.win_rate) if whale_stats.win_rate else 0
+        trades = int(whale_stats.trades) if whale_stats.trades else 0
+        cumulative_pnl = float(whale_stats.roi) if whale_stats.roi else 0
+        
+        # Calculate base score using the new formula
+        base_score = (
+            roi_pct * 0.35 +
+            win_rate * 100 * 0.25 +  # Convert win_rate to percentage
+            math.log(trades + 1) * 0.15 +
+            cumulative_pnl * 0.15
+        )
+        
+        # Calculate diversity factor
+        diversity_factor = self.calculate_diversity_factor(whale_address)
+        
+        # Apply diversity adjustment
+        adjusted_score = base_score * (0.1 + 0.9 * diversity_factor)
+        
+        logger.info(f"Whale {whale_address} Score v2.0: base={base_score:.2f}, "
+                   f"diversity={diversity_factor:.3f}, adjusted={adjusted_score:.2f}")
+        
+        return adjusted_score
+    
+    def update_whale_token_trade(self, whale_address: str, token_symbol: str, 
+                                pnl_change: float, token_address: str = None) -> None:
+        """Update token-level PnL and recalculate whale score"""
+        whale_address = whale_address.lower()
+        
+        # Update token-level PnL in database
+        self.db.update_whale_token_pnl(whale_address, token_symbol, pnl_change, token_address)
+        
+        # Recalculate Score v2.0
+        new_score = self.calculate_score_v2(whale_address)
+        
+        # Update whale's overall score in database
+        self.db.update_whale_performance(whale_address, score=new_score)
+        
+        # Update in-memory whale stats
+        if whale_address in self.whale_scores:
+            self.whale_scores[whale_address].score = Decimal(str(new_score))
+        
+        logger.info(f"Updated whale {whale_address} token {token_symbol}: PnL {pnl_change:+.4f}, new score: {new_score:.2f}")
+    
