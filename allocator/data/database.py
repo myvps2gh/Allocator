@@ -55,6 +55,32 @@ class DatabaseManager:
         )
         """)
         
+        # Add new columns to existing table if they don't exist (for migration)
+        try:
+            self.conn.execute("ALTER TABLE whales ADD COLUMN cumulative_pnl REAL DEFAULT 0.0")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+        
+        try:
+            self.conn.execute("ALTER TABLE whales ADD COLUMN risk_multiplier REAL DEFAULT 1.0")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+        
+        try:
+            self.conn.execute("ALTER TABLE whales ADD COLUMN allocation_size REAL DEFAULT 0.0")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+        
+        try:
+            self.conn.execute("ALTER TABLE whales ADD COLUMN score REAL DEFAULT 0.0")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+        
+        try:
+            self.conn.execute("ALTER TABLE whales ADD COLUMN win_rate REAL DEFAULT 0.0")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+        
         # Create trades table for detailed trade history
         self.conn.execute("""
         CREATE TABLE IF NOT EXISTS trades (
@@ -86,6 +112,16 @@ class DatabaseManager:
         self.conn.execute("CREATE INDEX IF NOT EXISTS idx_trades_actor ON trades(actor)")
         
         self.conn.commit()
+    
+    def get_table_info(self, table_name: str = "whales") -> List[Tuple]:
+        """Get table schema information for debugging"""
+        with self.lock:
+            try:
+                cursor = self.conn.execute(f"PRAGMA table_info({table_name})")
+                return cursor.fetchall()
+            except sqlite3.Error as e:
+                logger.error(f"Database error getting table info for {table_name}: {e}")
+                return []
     
     def get_whale(self, addr: str) -> Optional[Tuple]:
         """Get whale data from database"""

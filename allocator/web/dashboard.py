@@ -319,18 +319,40 @@ def create_app(whale_tracker, risk_manager, db_manager, mode: str = "LIVE") -> F
             for whale_row in db_whales:
                 # Database columns: 0=address, 1=moralis_roi_pct, 2=roi_usd, 3=trades, 4=cumulative_pnl, 
                 # 5=risk_multiplier, 6=allocation_size, 7=score, 8=win_rate, 9=bootstrap_time, 10=last_refresh
-                whale_data.append({
-                    "address": whale_row[0],  # address
-                    "pnl": float(whale_row[4]) if whale_row[4] is not None else 0.0,  # cumulative_pnl
-                    "risk": float(whale_row[5]) if whale_row[5] is not None else 1.0,  # risk_multiplier
-                    "allocation": float(whale_row[6]) if whale_row[6] is not None else 0.0,  # allocation_size
-                    "count": int(whale_row[3]) if whale_row[3] is not None else 0,  # trades
-                    "score": float(whale_row[7]) if whale_row[7] is not None else 0.0,  # score
-                    "winrate": (float(whale_row[8]) * 100) if whale_row[8] is not None else 0.0,  # win_rate (convert to percentage)
-                    "moralis_roi": float(whale_row[1]) if whale_row[1] is not None else None,  # moralis_roi_pct
-                    "moralis_profit_usd": float(whale_row[2]) if whale_row[2] is not None else None,  # roi_usd
-                    "moralis_trades": int(whale_row[3]) if whale_row[3] is not None else None  # trades (same as count)
-                })
+                try:
+                    def safe_float(value, default=0.0):
+                        """Safely convert to float with default fallback"""
+                        if value is None:
+                            return default
+                        try:
+                            return float(value)
+                        except (ValueError, TypeError):
+                            return default
+                    
+                    def safe_int(value, default=0):
+                        """Safely convert to int with default fallback"""
+                        if value is None:
+                            return default
+                        try:
+                            return int(float(value))  # Convert via float first to handle string numbers
+                        except (ValueError, TypeError):
+                            return default
+                    
+                    whale_data.append({
+                        "address": whale_row[0] if whale_row[0] is not None else "unknown",  # address
+                        "pnl": safe_float(whale_row[4]),  # cumulative_pnl
+                        "risk": safe_float(whale_row[5], 1.0),  # risk_multiplier
+                        "allocation": safe_float(whale_row[6]),  # allocation_size
+                        "count": safe_int(whale_row[3]),  # trades
+                        "score": safe_float(whale_row[7]),  # score
+                        "winrate": safe_float(whale_row[8]) * 100,  # win_rate (convert to percentage)
+                        "moralis_roi": safe_float(whale_row[1]) if whale_row[1] is not None else None,  # moralis_roi_pct
+                        "moralis_profit_usd": safe_float(whale_row[2]) if whale_row[2] is not None else None,  # roi_usd
+                        "moralis_trades": safe_int(whale_row[3]) if whale_row[3] is not None else None  # trades (same as count)
+                    })
+                except Exception as e:
+                    logger.warning(f"Error processing whale row {whale_row}: {e}")
+                    continue
             
             # Sort by PnL
             whale_data.sort(key=lambda x: x["pnl"], reverse=True)
@@ -410,14 +432,36 @@ def create_app(whale_tracker, risk_manager, db_manager, mode: str = "LIVE") -> F
             for whale_row in db_whales:
                 # Database columns: 0=address, 1=moralis_roi_pct, 2=roi_usd, 3=trades, 4=cumulative_pnl, 
                 # 5=risk_multiplier, 6=allocation_size, 7=score, 8=win_rate, 9=bootstrap_time, 10=last_refresh
-                whale_data.append({
-                    "address": whale_row[0],  # address
-                    "pnl": float(whale_row[4]) if whale_row[4] is not None else 0.0,  # cumulative_pnl
-                    "risk_multiplier": float(whale_row[5]) if whale_row[5] is not None else 1.0,  # risk_multiplier
-                    "score": float(whale_row[7]) if whale_row[7] is not None else 0.0,  # score
-                    "win_rate": float(whale_row[8]) if whale_row[8] is not None else 0.0,  # win_rate
-                    "trades": int(whale_row[3]) if whale_row[3] is not None else 0  # trades
-                })
+                try:
+                    def safe_float(value, default=0.0):
+                        """Safely convert to float with default fallback"""
+                        if value is None:
+                            return default
+                        try:
+                            return float(value)
+                        except (ValueError, TypeError):
+                            return default
+                    
+                    def safe_int(value, default=0):
+                        """Safely convert to int with default fallback"""
+                        if value is None:
+                            return default
+                        try:
+                            return int(float(value))  # Convert via float first to handle string numbers
+                        except (ValueError, TypeError):
+                            return default
+                    
+                    whale_data.append({
+                        "address": whale_row[0] if whale_row[0] is not None else "unknown",  # address
+                        "pnl": safe_float(whale_row[4]),  # cumulative_pnl
+                        "risk_multiplier": safe_float(whale_row[5], 1.0),  # risk_multiplier
+                        "score": safe_float(whale_row[7]),  # score
+                        "win_rate": safe_float(whale_row[8]),  # win_rate
+                        "trades": safe_int(whale_row[3])  # trades
+                    })
+                except Exception as e:
+                    logger.warning(f"Error processing whale row in API {whale_row}: {e}")
+                    continue
             
             return jsonify(whale_data)
         except Exception as e:
