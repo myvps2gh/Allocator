@@ -317,8 +317,8 @@ def create_app(whale_tracker, risk_manager, db_manager, mode: str = "LIVE") -> F
             db_whales = db_manager.get_all_whales()
             
             for whale_row in db_whales:
-                # Database columns: address, moralis_roi_pct, roi_usd, trades, cumulative_pnl, 
-                # risk_multiplier, allocation_size, score, win_rate, bootstrap_time, last_refresh
+                # Database columns: 0=address, 1=moralis_roi_pct, 2=roi_usd, 3=trades, 4=cumulative_pnl, 
+                # 5=risk_multiplier, 6=allocation_size, 7=score, 8=win_rate, 9=bootstrap_time, 10=last_refresh
                 whale_data.append({
                     "address": whale_row[0],  # address
                     "pnl": float(whale_row[4]) if whale_row[4] is not None else 0.0,  # cumulative_pnl
