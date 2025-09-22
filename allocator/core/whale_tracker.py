@@ -742,18 +742,36 @@ class WhaleTracker:
                 "Content-Type": "application/json"
             }
             
-            # Get transfers from last 30 days with high limit
+            # Get transfers from last 30 days with conservative limit for free tier
             params = {
-                "chain": "eth",
+                "chain": "eth", 
                 "from_date": "2024-08-01",  # Adjust based on your needs
-                "limit": 500  # Max transfers to analyze
+                "limit": 50  # Conservative limit to avoid API errors
             }
             
             logger.debug(f"Calling Moralis token transfers API for {whale_address}")
             response = requests.get(token_transfers_url, headers=headers, params=params, timeout=30)
             
+            if response.status_code == 400:
+                # Check if it's a limit issue and retry with smaller limits
+                try:
+                    error_data = response.json() if response.headers.get('content-type', '').startswith('application/json') else {}
+                    if "Limit has a maximum" in error_data.get('message', ''):
+                        # Try progressively smaller limits
+                        for retry_limit in [50, 25, 10]:
+                            logger.warning(f"Retrying with limit {retry_limit} for whale {whale_address}")
+                            params['limit'] = retry_limit
+                            response = requests.get(token_transfers_url, headers=headers, params=params, timeout=30)
+                            if response.status_code == 200:
+                                break
+                            elif response.status_code != 400:
+                                break  # Different error, don't retry
+                except Exception as e:
+                    logger.debug(f"Error parsing retry response: {e}")
+            
             if response.status_code != 200:
                 logger.error(f"Moralis token transfers API error {response.status_code}: {response.text}")
+                # For now, just log and continue - we'll skip this whale
                 return
             
             data = response.json()
