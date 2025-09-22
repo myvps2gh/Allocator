@@ -321,15 +321,15 @@ def create_app(whale_tracker, risk_manager, db_manager, mode: str = "LIVE") -> F
                 # risk_multiplier, allocation_size, score, win_rate, bootstrap_time, last_refresh
                 whale_data.append({
                     "address": whale_row[0],  # address
-                    "pnl": whale_row[4] if whale_row[4] is not None else 0.0,  # cumulative_pnl
-                    "risk": whale_row[5] if whale_row[5] is not None else 1.0,  # risk_multiplier
-                    "allocation": whale_row[6] if whale_row[6] is not None else 0.0,  # allocation_size
-                    "count": whale_row[3] if whale_row[3] is not None else 0,  # trades
-                    "score": whale_row[7] if whale_row[7] is not None else 0.0,  # score
-                    "winrate": (whale_row[8] * 100) if whale_row[8] is not None else 0.0,  # win_rate (convert to percentage)
-                    "moralis_roi": whale_row[1] if whale_row[1] is not None else None,  # moralis_roi_pct
-                    "moralis_profit_usd": whale_row[2] if whale_row[2] is not None else None,  # roi_usd
-                    "moralis_trades": whale_row[3] if whale_row[3] is not None else None  # trades (same as count)
+                    "pnl": float(whale_row[4]) if whale_row[4] is not None else 0.0,  # cumulative_pnl
+                    "risk": float(whale_row[5]) if whale_row[5] is not None else 1.0,  # risk_multiplier
+                    "allocation": float(whale_row[6]) if whale_row[6] is not None else 0.0,  # allocation_size
+                    "count": int(whale_row[3]) if whale_row[3] is not None else 0,  # trades
+                    "score": float(whale_row[7]) if whale_row[7] is not None else 0.0,  # score
+                    "winrate": (float(whale_row[8]) * 100) if whale_row[8] is not None else 0.0,  # win_rate (convert to percentage)
+                    "moralis_roi": float(whale_row[1]) if whale_row[1] is not None else None,  # moralis_roi_pct
+                    "moralis_profit_usd": float(whale_row[2]) if whale_row[2] is not None else None,  # roi_usd
+                    "moralis_trades": int(whale_row[3]) if whale_row[3] is not None else None  # trades (same as count)
                 })
             
             # Sort by PnL
@@ -412,11 +412,11 @@ def create_app(whale_tracker, risk_manager, db_manager, mode: str = "LIVE") -> F
                 # risk_multiplier, allocation_size, score, win_rate, bootstrap_time, last_refresh
                 whale_data.append({
                     "address": whale_row[0],  # address
-                    "pnl": whale_row[4] if whale_row[4] is not None else 0.0,  # cumulative_pnl
-                    "risk_multiplier": whale_row[5] if whale_row[5] is not None else 1.0,  # risk_multiplier
-                    "score": whale_row[7] if whale_row[7] is not None else 0.0,  # score
-                    "win_rate": whale_row[8] if whale_row[8] is not None else 0.0,  # win_rate
-                    "trades": whale_row[3] if whale_row[3] is not None else 0  # trades
+                    "pnl": float(whale_row[4]) if whale_row[4] is not None else 0.0,  # cumulative_pnl
+                    "risk_multiplier": float(whale_row[5]) if whale_row[5] is not None else 1.0,  # risk_multiplier
+                    "score": float(whale_row[7]) if whale_row[7] is not None else 0.0,  # score
+                    "win_rate": float(whale_row[8]) if whale_row[8] is not None else 0.0,  # win_rate
+                    "trades": int(whale_row[3]) if whale_row[3] is not None else 0  # trades
                 })
             
             return jsonify(whale_data)
