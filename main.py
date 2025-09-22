@@ -303,18 +303,30 @@ class AllocatorAI:
         def discovery_worker():
             while self.is_running:
                 try:
-                    logger.info(f"Starting PARALLEL discovery for modes: {self.config.discovery.modes}")
+                    # Prepare discovery modes list
+                    discovery_modes = list(self.config.discovery.modes)
+                    
+                    # Add adaptive discovery mode if enabled
+                    adaptive_config = getattr(self.config.discovery, 'adaptive_discovery', {})
+                    if adaptive_config.get('enabled', False):
+                        discovery_modes.append('adaptive_percentile')
+                    
+                    logger.info(f"Starting PARALLEL discovery for modes: {discovery_modes}")
                     
                     # Run all discovery modes in parallel using HTTP connections
                     import concurrent.futures
                     all_validated_whales = {}
                     
-                    with concurrent.futures.ThreadPoolExecutor(max_workers=len(self.config.discovery.modes)) as executor:
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=len(discovery_modes)) as executor:
                         # Submit all discovery modes simultaneously
-                        futures = {
-                            executor.submit(run_discovery_mode_http, mode): mode 
-                            for mode in self.config.discovery.modes
-                        }
+                        futures = {}
+                        for mode in discovery_modes:
+                            if mode == 'adaptive_percentile':
+                                # Run adaptive discovery
+                                futures[executor.submit(self._run_adaptive_discovery_mode)] = mode
+                            else:
+                                # Run standard discovery
+                                futures[executor.submit(run_discovery_mode_http, mode)] = mode
                         
                         # Collect results as they complete
                         for future in concurrent.futures.as_completed(futures):
@@ -353,6 +365,41 @@ class AllocatorAI:
         discovery_thread = threading.Thread(target=discovery_worker, daemon=True)
         discovery_thread.start()
         logger.info(f"Started PARALLEL whale discovery for {len(self.config.discovery.modes)} modes using HTTP connections")
+    
+    def _run_adaptive_discovery_mode(self):
+        """Run adaptive percentile-based discovery mode"""
+        try:
+            logger.info("Starting discovery with mode: adaptive_percentile")
+            start_time = time.time()
+            
+            # Get adaptive configuration
+            adaptive_config = getattr(self.config.discovery, 'adaptive_discovery', {})
+            
+            # Get candidates using adaptive discovery
+            candidate_whales = self.whale_tracker.discover_whales_adaptive(
+                self.web3_manager.w3,
+                adaptive_config,
+                simulate=(self.mode != "LIVE")
+            )
+            
+            scan_duration = time.time() - start_time
+            logger.info(f"Discovery mode adaptive_percentile found {len(candidate_whales)} candidate whales in {scan_duration:.1f}s")
+            
+            # Validation is already handled in discover_whales_adaptive
+            validated_whales = candidate_whales
+            
+            if self.mode == "DRY_RUN_WO_MOR":
+                logger.info(f"Mode adaptive_percentile: Skipping additional Moralis validation (DRY_RUN_WO_MOR)")
+            else:
+                logger.info(f"Mode adaptive_percentile: {len(validated_whales)} whales found and validated")
+            
+            total_duration = time.time() - start_time
+            logger.info(f"Discovery mode adaptive_percentile completed in {total_duration:.1f}s")
+            return "adaptive_percentile", validated_whales
+            
+        except Exception as e:
+            logger.error(f"Discovery mode adaptive_percentile failed: {e}")
+            return "adaptive_percentile", []
     
     def start_monitoring(self):
         """Start mempool monitoring"""

@@ -12,6 +12,9 @@ from dataclasses import dataclass
 
 from ..utils.math_utils import calculate_win_rate, calculate_volatility, calculate_sharpe_ratio
 from ..data.cache import CacheManager, RateLimiter
+from ..analytics.market_conditions import MarketConditionAnalyzer
+from ..analytics.adaptive_discovery import AdaptiveDiscoveryEngine
+from ..analytics.moralis_feedback import MoralisFeedbackTracker
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +43,11 @@ class WhaleTracker:
         self.cache = cache_manager
         self.db = db_manager
         self.rate_limiter = RateLimiter(max_calls=100, time_window=3600)  # 100 calls per hour
+        
+        # New adaptive components
+        self.market_analyzer = None  # Will be initialized when needed
+        self.adaptive_engine = None  # Will be initialized when needed
+        self.moralis_feedback = MoralisFeedbackTracker(db_manager)
         
         # Whale performance tracking
         self.whale_history = defaultdict(lambda: deque(maxlen=50))  # Keep last 50 trades
@@ -343,6 +351,86 @@ class WhaleTracker:
         
         logger.info(f"Successfully added {len(added_whales)} whales to tracking")
         return added_whales
+    
+    def discover_whales_adaptive(self, w3, adaptive_config: Dict, simulate: bool = False) -> List[str]:
+        """Run adaptive whale discovery using percentile-based thresholds"""
+        try:
+            # Initialize adaptive components if needed
+            if self.market_analyzer is None:
+                self.market_analyzer = MarketConditionAnalyzer(w3, self.cache)
+            
+            if self.adaptive_engine is None:
+                self.adaptive_engine = AdaptiveDiscoveryEngine(w3, self.market_analyzer)
+            
+            # Get adaptive configuration
+            percentile_config = adaptive_config.get("percentile_mode", {})
+            
+            if not percentile_config.get("enabled", False):
+                logger.info("Adaptive percentile discovery is disabled")
+                return []
+            
+            activity_percentile = percentile_config.get("activity_percentile", 5.0)
+            profit_percentile = percentile_config.get("profit_percentile", 25.0)
+            blocks_back = percentile_config.get("blocks_back", 10000)
+            
+            logger.info(f"Running adaptive discovery: top {activity_percentile}% activity, "
+                       f"top {profit_percentile}% profit over {blocks_back} blocks")
+            
+            # Run adaptive discovery
+            result = self.adaptive_engine.discover_whales_percentile(
+                activity_percentile=activity_percentile,
+                profit_percentile=profit_percentile,
+                blocks_back=blocks_back
+            )
+            
+            candidates = result.get("candidates", [])
+            
+            if simulate:
+                return candidates
+            
+            # Validate with Moralis
+            validated_whales = []
+            for whale_address in candidates:
+                try:
+                    if self.bootstrap_whale_from_moralis(whale_address):
+                        validated_whales.append(whale_address)
+                        # Track acceptance
+                        self.moralis_feedback.track_moralis_acceptance(
+                            address=whale_address,
+                            roi_pct=0.0,  # Will be updated with actual values
+                            profit_usd=0.0,
+                            trades=0,
+                            discovery_mode="adaptive_percentile"
+                        )
+                    else:
+                        # Track rejection (reason will be determined in bootstrap_whale_from_moralis)
+                        self.moralis_feedback.track_moralis_rejection(
+                            address=whale_address,
+                            reason="failed_validation",
+                            discovery_mode="adaptive_percentile"
+                        )
+                except Exception as e:
+                    logger.warning(f"Failed to validate adaptive candidate {whale_address[:10]}...: {e}")
+                    self.moralis_feedback.track_moralis_rejection(
+                        address=whale_address,
+                        reason="api_error",
+                        discovery_mode="adaptive_percentile"
+                    )
+            
+            logger.info(f"Adaptive discovery: {len(validated_whales)}/{len(candidates)} whales validated")
+            return validated_whales
+            
+        except Exception as e:
+            logger.error(f"Adaptive discovery failed: {e}")
+            return []
+    
+    def get_adaptive_suggestions(self, mode: str, current_thresholds: Dict) -> Dict:
+        """Get adjustment suggestions based on Moralis feedback"""
+        return self.moralis_feedback.get_adjustment_suggestions(mode, current_thresholds)
+    
+    def get_moralis_feedback_summary(self) -> Dict:
+        """Get summary of Moralis feedback for dashboard"""
+        return self.moralis_feedback.get_rejection_summary()
     
     
     def get_whale_stats(self, whale_address: str) -> Optional[WhaleStats]:

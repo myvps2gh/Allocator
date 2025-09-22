@@ -47,6 +47,30 @@
         "min_roi": 0.15,
         "_comment": "PnL was 35"
       }
+    },
+    "adaptive_discovery": {
+      "enabled": true,
+      "percentile_mode": {
+        "enabled": true,
+        "activity_percentile": 5,
+        "profit_percentile": 25,
+        "blocks_back": 10000,
+        "mode_name": "adaptive_percentile"
+      },
+      "market_adaptive": {
+        "enabled": true,
+        "volatility_adjustment": true,
+        "liquidity_threshold_scaling": true,
+        "volatility_window_blocks": 1000,
+        "base_threshold_multiplier": 1.0
+      },
+      "moralis_feedback": {
+        "enabled": true,
+        "rejection_tracking": true,
+        "auto_threshold_adjustment": true,
+        "adjustment_sensitivity": 0.1,
+        "min_samples_for_adjustment": 10
+      }
     }
   }
 }

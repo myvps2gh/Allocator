@@ -41,6 +41,15 @@ class Web3Config:
     timeout: int = 30
 
 
+@dataclass  
+class AdaptiveDiscoveryConfig:
+    """Adaptive discovery configuration"""
+    enabled: bool = False
+    percentile_mode: dict = None
+    market_adaptive: dict = None
+    moralis_feedback: dict = None
+
+
 @dataclass
 class DiscoveryConfig:
     """Whale discovery configuration"""
@@ -48,6 +57,7 @@ class DiscoveryConfig:
     refresh_interval: int = 600  # 10 minutes
     max_whales: int = 100
     mode_settings: dict = None
+    adaptive_discovery: AdaptiveDiscoveryConfig = None
     
     def __post_init__(self):
         if self.modes is None:
@@ -115,7 +125,13 @@ class Config:
                 modes=config_data.get("discovery", {}).get("modes", ["active_whale", "quick_profit_whale", "fast_mover_whale"]),
                 refresh_interval=config_data.get("discovery", {}).get("refresh_interval", 600),
                 max_whales=config_data.get("discovery", {}).get("max_whales", 100),
-                mode_settings=config_data.get("discovery", {}).get("mode_settings", {})
+                mode_settings=config_data.get("discovery", {}).get("mode_settings", {}),
+                adaptive_discovery=AdaptiveDiscoveryConfig(
+                    enabled=config_data.get("discovery", {}).get("adaptive_discovery", {}).get("enabled", False),
+                    percentile_mode=config_data.get("discovery", {}).get("adaptive_discovery", {}).get("percentile_mode", {}),
+                    market_adaptive=config_data.get("discovery", {}).get("adaptive_discovery", {}).get("market_adaptive", {}),
+                    moralis_feedback=config_data.get("discovery", {}).get("adaptive_discovery", {}).get("moralis_feedback", {})
+                )
             ),
             logging=LoggingConfig(
                 level=os.environ.get("LOG_LEVEL", "INFO"),
