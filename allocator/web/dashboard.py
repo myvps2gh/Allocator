@@ -375,16 +375,18 @@ DASHBOARD_TEMPLATE = """
         // Toggle token breakdown display
         function toggleTokens(whaleAddress) {
             const row = document.getElementById('tokens-' + whaleAddress);
-            const button = event.target;
+            const button = document.querySelector(`button[onclick="toggleTokens('${whaleAddress}')"]`);
             
-            if (row.style.display === 'none') {
-                row.style.display = 'table-row';
-                button.textContent = 'Hide Tokens';
-                button.style.background = '#dc3545';
-            } else {
-                row.style.display = 'none';
-                button.textContent = 'Show Tokens';
-                button.style.background = '#28a745';
+            if (row && button) {
+                if (row.style.display === 'none' || row.style.display === '') {
+                    row.style.display = 'table-row';
+                    button.textContent = 'Hide Tokens';
+                    button.style.background = '#dc3545';
+                } else {
+                    row.style.display = 'none';
+                    button.textContent = 'Show Tokens';
+                    button.style.background = '#28a745';
+                }
             }
         }
     </script>

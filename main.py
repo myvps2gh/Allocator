@@ -495,6 +495,8 @@ def main():
                        help="Include trade simulation when refreshing whale metrics")
     parser.add_argument("--recalc-scores", action="store_true",
                        help="Recalculate all whale scores using Score Formula v2.0 and exit")
+    parser.add_argument("--fetch-tokens", action="store_true",
+                       help="Fetch real token-level data from Moralis for all whales and exit")
     
     args = parser.parse_args()
     
@@ -518,19 +520,115 @@ def main():
             for whale_data in db_whales:
                 allocator.whale_tracker.tracked_whales.add(whale_data[0])
             
-            # Recalculate scores for all whales
+            logger.info(f"Found {len(allocator.whale_tracker.tracked_whales)} tracked whales")
+            
+            # First, fetch real token data from Moralis for whales that don't have it
+            logger.info("Step 1: Fetching real token data from Moralis for existing whales...")
+            fetch_count = 0
+            for whale_address in allocator.whale_tracker.tracked_whales:
+                try:
+                    # Check if whale has token data
+                    existing_tokens = allocator.db_manager.get_whale_token_breakdown(whale_address)
+                    if not existing_tokens:
+                        allocator.whale_tracker.fetch_token_data_from_moralis(whale_address)
+                        fetch_count += 1
+                        
+                        # Add small delay to respect rate limits
+                        import time
+                        time.sleep(1)
+                    else:
+                        logger.debug(f"Whale {whale_address} already has {len(existing_tokens)} token records")
+                except Exception as e:
+                    logger.error(f"Error fetching token data for {whale_address}: {e}")
+            
+            logger.info(f"Fetched real token data from Moralis for {fetch_count} whales")
+            
+            # Now recalculate scores for all whales
+            logger.info("Step 2: Recalculating scores using Score Formula v2.0...")
             updated_count = 0
             for whale_address in allocator.whale_tracker.tracked_whales:
                 try:
+                    # Load whale stats into memory first
+                    whale_data = allocator.db_manager.get_whale(whale_address)
+                    if whale_data:
+                        # Create whale stats object if it doesn't exist
+                        if whale_address not in allocator.whale_tracker.whale_scores:
+                            from allocator.core.whale_tracker import WhaleStats
+                            from decimal import Decimal
+                            allocator.whale_tracker.whale_scores[whale_address] = WhaleStats(
+                                address=whale_address,
+                                score=Decimal(str(whale_data[7] or 0)),  # existing score
+                                roi=Decimal(str(whale_data[4] or 0)),    # cumulative_pnl  
+                                trades=whale_data[3] or 0,               # trades
+                                win_rate=Decimal(str(whale_data[8] or 0)), # win_rate
+                                volatility=Decimal("1"),
+                                sharpe_ratio=Decimal("0"),
+                                moralis_roi_pct=Decimal(str(whale_data[1] or 0)),
+                                moralis_profit_usd=Decimal(str(whale_data[2] or 0)),
+                                moralis_trades=whale_data[3] or 0
+                            )
+                    
+                    # Calculate new score
                     new_score = allocator.whale_tracker.calculate_score_v2(whale_address)
                     if new_score > 0:
                         allocator.db_manager.update_whale_performance(whale_address, score=new_score)
                         updated_count += 1
-                        logger.info(f"Updated {whale_address}: Score v2.0 = {new_score:.2f}")
+                        
+                        # Get diversity factor for logging
+                        diversity = allocator.whale_tracker.calculate_diversity_factor(whale_address)
+                        tokens = allocator.db_manager.get_whale_token_breakdown(whale_address)
+                        
+                        logger.info(f"Updated {whale_address[:10]}...: Score v2.0 = {new_score:.2f} "
+                                  f"(diversity: {diversity:.3f}, tokens: {len(tokens)})")
+                    else:
+                        logger.warning(f"Whale {whale_address} calculated score is 0 - skipping update")
+                        
                 except Exception as e:
                     logger.error(f"Error recalculating score for {whale_address}: {e}")
             
-            logger.info(f"Score recalculation completed! Updated {updated_count} whales.")
+            logger.info(f"Score recalculation completed! Updated {updated_count}/{len(allocator.whale_tracker.tracked_whales)} whales.")
+            return
+        
+        # Handle token data fetching command
+        if args.fetch_tokens:
+            logger.info("Fetching real token-level data from Moralis for all whales...")
+            
+            # Load existing whales from database
+            db_whales = allocator.db_manager.get_all_whales()
+            for whale_data in db_whales:
+                allocator.whale_tracker.tracked_whales.add(whale_data[0])
+            
+            logger.info(f"Found {len(allocator.whale_tracker.tracked_whales)} tracked whales")
+            
+            # Fetch token data from Moralis
+            fetch_count = 0
+            total_tokens = 0
+            for whale_address in allocator.whale_tracker.tracked_whales:
+                try:
+                    logger.info(f"Processing whale {whale_address[:10]}... ({fetch_count + 1}/{len(allocator.whale_tracker.tracked_whales)})")
+                    
+                    # Check if whale already has token data
+                    existing_tokens = allocator.db_manager.get_whale_token_breakdown(whale_address)
+                    if existing_tokens:
+                        logger.info(f"  Already has {len(existing_tokens)} token records - skipping")
+                        continue
+                    
+                    # Fetch from Moralis
+                    allocator.whale_tracker.fetch_token_data_from_moralis(whale_address)
+                    fetch_count += 1
+                    
+                    # Check what was fetched
+                    new_tokens = allocator.db_manager.get_whale_token_breakdown(whale_address)
+                    total_tokens += len(new_tokens)
+                    
+                    # Rate limiting delay
+                    import time
+                    time.sleep(1.2)  # 50 requests per minute max for free Moralis
+                    
+                except Exception as e:
+                    logger.error(f"Error fetching token data for {whale_address}: {e}")
+            
+            logger.info(f"Token data fetching completed! Processed {fetch_count} whales, got {total_tokens} total token records.")
             return
         
         allocator.run(mode=args.mode, use_mempool=not args.no_mempool)

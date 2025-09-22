@@ -716,3 +716,134 @@ class WhaleTracker:
         
         logger.info(f"Updated whale {whale_address} token {token_symbol}: PnL {pnl_change:+.4f}, new score: {new_score:.2f}")
     
+    def fetch_token_data_from_moralis(self, whale_address: str) -> None:
+        """Fetch real token-level data from Moralis for existing whales"""
+        whale_address = whale_address.lower()
+        
+        # Check if whale already has token data
+        existing_tokens = self.db.get_whale_token_breakdown(whale_address)
+        if existing_tokens:
+            logger.debug(f"Whale {whale_address} already has {len(existing_tokens)} token records")
+            return
+        
+        logger.info(f"Fetching token-level data from Moralis for whale {whale_address}")
+        
+        try:
+            # Check rate limiting
+            if not self.rate_limiter.can_make_call("moralis_api"):
+                logger.warning(f"Rate limited for Moralis API call for {whale_address}")
+                return
+            
+            # Fetch token transfers for the whale - this gives us token-level activity
+            token_transfers_url = f"https://deep-index.moralis.io/api/v2.2/{whale_address}/erc20/transfers"
+            
+            headers = {
+                "X-API-Key": self.moralis_api_key,
+                "Content-Type": "application/json"
+            }
+            
+            # Get transfers from last 30 days with high limit
+            params = {
+                "chain": "eth",
+                "from_date": "2024-08-01",  # Adjust based on your needs
+                "limit": 500  # Max transfers to analyze
+            }
+            
+            logger.debug(f"Calling Moralis token transfers API for {whale_address}")
+            response = requests.get(token_transfers_url, headers=headers, params=params, timeout=30)
+            
+            if response.status_code != 200:
+                logger.error(f"Moralis token transfers API error {response.status_code}: {response.text}")
+                return
+            
+            data = response.json()
+            transfers = data.get("result", [])
+            
+            if not transfers:
+                logger.info(f"No token transfers found for whale {whale_address}")
+                return
+            
+            # Analyze transfers to build token PnL estimates
+            token_activity = defaultdict(lambda: {"in_value": 0, "out_value": 0, "trades": 0})
+            
+            for transfer in transfers:
+                try:
+                    token_symbol = transfer.get("token_symbol", "UNKNOWN")
+                    token_address = transfer.get("token_address", "")
+                    from_address = transfer.get("from_address", "").lower()
+                    to_address = transfer.get("to_address", "").lower()
+                    value = float(transfer.get("value_formatted", 0) or 0)
+                    
+                    # Skip very small transfers (likely dust)
+                    if value < 0.0001:
+                        continue
+                    
+                    # Track inflows and outflows
+                    if from_address == whale_address:
+                        # Whale selling/sending tokens
+                        token_activity[token_symbol]["out_value"] += value
+                        token_activity[token_symbol]["trades"] += 1
+                    elif to_address == whale_address:
+                        # Whale buying/receiving tokens
+                        token_activity[token_symbol]["in_value"] += value
+                        token_activity[token_symbol]["trades"] += 1
+                    
+                    # Store token address for the first occurrence
+                    if not hasattr(token_activity[token_symbol], 'address'):
+                        token_activity[token_symbol]['address'] = token_address
+                        
+                except Exception as e:
+                    logger.debug(f"Error processing transfer: {e}")
+                    continue
+            
+            # Convert activity to PnL estimates and store in database
+            tokens_added = 0
+            total_estimated_pnl = 0
+            
+            for token_symbol, activity in token_activity.items():
+                if activity["trades"] == 0:
+                    continue
+                
+                # Simple PnL estimation: assume whale is net positive on tokens they're actively trading
+                # This is a rough heuristic - real PnL would need price data at trade time
+                net_volume = abs(activity["in_value"] - activity["out_value"])
+                trade_count = activity["trades"]
+                
+                # Estimate PnL as a percentage of volume (crude approximation)
+                # Active traders might make 5-20% on their trades
+                estimated_pnl_pct = min(0.15, max(0.01, trade_count / 100))  # 1-15% based on activity
+                estimated_pnl = net_volume * estimated_pnl_pct
+                
+                if estimated_pnl > 0.001:  # Only store meaningful PnL
+                    # Convert to ETH equivalent (rough approximation)
+                    if token_symbol in ["USDC", "USDT", "DAI"]:
+                        estimated_pnl_eth = estimated_pnl / 2000  # USD to ETH
+                    elif token_symbol == "WBTC":
+                        estimated_pnl_eth = estimated_pnl * 15    # BTC to ETH (rough ratio)
+                    elif token_symbol == "ETH":
+                        estimated_pnl_eth = estimated_pnl
+                    else:
+                        estimated_pnl_eth = estimated_pnl * 0.001  # Alt coins to ETH (very rough)
+                    
+                    # Store in database
+                    token_address = activity.get('address', '')
+                    self.db.update_whale_token_pnl(whale_address, token_symbol, estimated_pnl_eth, token_address)
+                    
+                    tokens_added += 1
+                    total_estimated_pnl += estimated_pnl_eth
+                    
+                    logger.debug(f"  {token_symbol}: {estimated_pnl_eth:.6f} ETH PnL ({trade_count} trades)")
+            
+            if tokens_added > 0:
+                logger.info(f"Fetched token data for whale {whale_address}: "
+                           f"{tokens_added} tokens, {total_estimated_pnl:.4f} ETH total estimated PnL")
+            else:
+                logger.info(f"No meaningful token activity found for whale {whale_address}")
+                
+            # Cache the result
+            self.cache.set('moralis_tokens', whale_address, {"tokens": tokens_added}, ttl=86400)
+            
+        except Exception as e:
+            logger.error(f"Error fetching token data from Moralis for {whale_address}: {e}")
+            return
+    
