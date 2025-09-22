@@ -237,8 +237,25 @@ class AllocatorAI:
                 start_time = time.time()
                 
                 # Create HTTP connection for this discovery mode (no async conflicts)
-                http_rpc = self.config.web3.rpc_url.replace('ws://', 'http://').replace('wss://', 'https://')
-                discovery_w3 = Web3(Web3.HTTPProvider(http_rpc))
+                # Try HTTP on port 8545 first, fallback to same port as WebSocket
+                ws_url = self.config.web3.rpc_url
+                if ':8546' in ws_url:
+                    http_rpc = ws_url.replace('ws://', 'http://').replace(':8546', ':8545')
+                else:
+                    http_rpc = ws_url.replace('ws://', 'http://').replace('wss://', 'https://')
+                
+                try:
+                    discovery_w3 = Web3(Web3.HTTPProvider(http_rpc))
+                    # Test the connection
+                    discovery_w3.eth.block_number
+                    logger.info(f"Mode {mode}: Using HTTP connection {http_rpc}")
+                except Exception as e:
+                    # Fallback: try HTTP on the same port as WebSocket
+                    logger.warning(f"Mode {mode}: HTTP port 8545 failed ({e}), trying same port as WebSocket")
+                    http_rpc_fallback = ws_url.replace('ws://', 'http://').replace('wss://', 'https://')
+                    discovery_w3 = Web3(Web3.HTTPProvider(http_rpc_fallback))
+                    discovery_w3.eth.block_number  # Test this connection too
+                    logger.info(f"Mode {mode}: Using HTTP connection {http_rpc_fallback}")
                 
                 # Get candidates from blockchain scanning
                 candidate_whales = self.whale_tracker.discover_whales_from_blocks(
