@@ -322,10 +322,10 @@ def create_app(whale_tracker, risk_manager, db_manager, mode: str = "LIVE") -> F
                     "address": whale_addr,
                     "pnl": float(risk_profile["pnl"]),
                     "risk": float(risk_profile["risk_multiplier"]),
-                    "allocation": float(risk_profile["pnl"] * 0.1),  # Simplified
+                    "allocation": float(risk_profile["pnl"]) * 0.1,  # Convert to float first
                     "count": stats.trades if stats else 0,
                     "score": float(stats.score) if stats else 0,
-                    "winrate": float(stats.win_rate * 100) if stats else 0,
+                    "winrate": float(stats.win_rate) * 100 if stats else 0,
                     "moralis_roi": float(stats.moralis_roi_pct) if stats and stats.moralis_roi_pct else None,
                     "moralis_profit_usd": float(stats.moralis_profit_usd) if stats and stats.moralis_profit_usd else None,
                     "moralis_trades": stats.moralis_trades if stats else None
