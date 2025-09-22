@@ -18,29 +18,34 @@
       "bot_hunter": {
         "blocks_back": 5000,
         "min_trades": 15,
-        "min_pnl_threshold": 50
+        "min_pnl_threshold": 25,
+        "_comment": "PnL was 50"
       },
       "active_whale": {
         "blocks_back": 18000,
         "min_trades": 8,
-        "min_pnl_threshold": 25
+        "min_pnl_threshold": 15,
+        "_comment": "PnL was 25"
       },
       "lazy_whale": {
         "blocks_back": 18500,
         "min_trades": 6,
-        "min_pnl_threshold": 100
+        "min_pnl_threshold": 50,
+        "_comment": "PnL was 100"
       },
       "quick_profit_whale": {
         "blocks_back": 15000,
         "min_trades": 5,
         "min_pnl_threshold": 40,
-        "profit_window_hours": 72
+        "profit_window_hours": 72,
+        "_comment": "PnL was 20"
       },
       "fast_mover_whale": {
         "blocks_back": 17000,
         "min_trades": 6,
-        "min_pnl_threshold": 35,
-        "min_roi": 0.15
+        "min_pnl_threshold": 15,
+        "min_roi": 0.15,
+        "_comment": "PnL was 35"
       }
     }
   }
