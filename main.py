@@ -379,10 +379,11 @@ class AllocatorAI:
                 return "adaptive_percentile", []
             
             # Get candidates using adaptive discovery
+            # Only simulate if in DRY_RUN_WO_MOR mode (skip Moralis), otherwise validate with Moralis
             candidate_whales = self.whale_tracker.discover_whales_adaptive(
                 self.web3_manager.w3,
                 adaptive_config,
-                simulate=(self.mode != "LIVE")
+                simulate=(self.mode == "DRY_RUN_WO_MOR")
             )
             
             scan_duration = time.time() - start_time
