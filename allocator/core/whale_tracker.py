@@ -283,26 +283,61 @@ class WhaleTracker:
         # Get current whale stats (will be default/empty for new whales)
         whale_stats = self.get_whale_stats(whale_address)
         
-        # Calculate initial allocation size (simplified calculation)
-        # Base allocation as 10% of estimated capital allocation
+        # Calculate more meaningful initial values based on Moralis data
+        moralis_roi_pct = Decimal(str(moralis_data["realized_pct"]))
+        moralis_profit_usd = Decimal(str(moralis_data["realized_usd"]))
+        moralis_trades = moralis_data["total_trades"]
+        
+        # Estimate initial allocation size based on Moralis ROI and capital
         base_capital = Decimal("1000")  # Default base capital for calculation
-        initial_allocation = float(base_capital * Decimal("0.1"))
+        # Scale allocation based on Moralis performance (better whales get more allocation)
+        roi_multiplier = min(max(moralis_roi_pct / Decimal("100"), Decimal("0.5")), Decimal("2.0"))
+        initial_allocation = float(base_capital * Decimal("0.1") * roi_multiplier)
         
-        # Initial risk multiplier (will be updated as trades occur)
-        initial_risk = 1.0
+        # Initial risk multiplier based on Moralis performance
+        if moralis_roi_pct > 50:
+            initial_risk = 1.5  # High performing whale
+        elif moralis_roi_pct > 20:
+            initial_risk = 1.2  # Good performing whale
+        elif moralis_roi_pct > 0:
+            initial_risk = 1.0  # Positive whale
+        else:
+            initial_risk = 0.8  # Poor performing whale
         
-        # Save to database with additional fields
+        # Estimate initial score based on Moralis data
+        # Simple heuristic: ROI% * sqrt(trades) / 10
+        if moralis_trades > 0:
+            estimated_score = float(moralis_roi_pct * (moralis_trades ** 0.5) / 10)
+        else:
+            estimated_score = 0.0
+        
+        # Estimate win rate based on ROI (rough approximation)
+        if moralis_roi_pct > 30:
+            estimated_win_rate = 0.7  # 70% win rate for high ROI
+        elif moralis_roi_pct > 10:
+            estimated_win_rate = 0.6  # 60% win rate
+        elif moralis_roi_pct > 0:
+            estimated_win_rate = 0.55  # 55% win rate
+        else:
+            estimated_win_rate = 0.4  # 40% win rate for losing whales
+        
+        # Convert Moralis USD profit to rough ETH estimate (assuming $2000/ETH)
+        estimated_pnl_eth = float(moralis_profit_usd / Decimal("2000"))
+        
+        # Save to database with meaningful initial values
         self.db.save_whale(
             whale_address,
             float(moralis_data["realized_pct"]),
             float(moralis_data["realized_usd"]),
             moralis_data["total_trades"],
-            cumulative_pnl=float(whale_stats.roi) if whale_stats else 0.0,
+            cumulative_pnl=estimated_pnl_eth,  # Estimated ETH PnL from USD
             risk_multiplier=initial_risk,
             allocation_size=initial_allocation,
-            score=float(whale_stats.score) if whale_stats else 0.0,
-            win_rate=float(whale_stats.win_rate) if whale_stats else 0.0
+            score=estimated_score,
+            win_rate=estimated_win_rate
         )
+        
+        logger.info(f"Initialized whale {whale_address} metrics: risk={initial_risk:.2f}, allocation={initial_allocation:.2f} ETH, score={estimated_score:.2f}")        
         
         logger.info(f"Added whale {whale_address} to tracking: {moralis_data['realized_pct']}% ROI, ${moralis_data['realized_usd']} profit")
         return True
@@ -457,6 +492,29 @@ class WhaleTracker:
         """Get summary of Moralis feedback for dashboard"""
         return self.moralis_feedback.get_rejection_summary()
     
+    def simulate_whale_trades(self, whale_address: str, num_trades: int = 5) -> None:
+        """Simulate some trade history for a whale (useful for DRY_RUN mode testing)"""
+        import random
+        whale_address = whale_address.lower()
+        
+        logger.info(f"Simulating {num_trades} trades for whale {whale_address}")
+        
+        for i in range(num_trades):
+            # Generate random PnL based on whale's Moralis performance
+            whale_stats = self.whale_scores.get(whale_address)
+            if whale_stats and whale_stats.moralis_roi_pct:
+                # Base PnL on historical performance with some randomness
+                base_performance = float(whale_stats.moralis_roi_pct) / 100
+                random_factor = random.uniform(0.5, 1.5)
+                simulated_pnl = Decimal(str(base_performance * random_factor * random.uniform(0.1, 2.0)))
+            else:
+                # Random PnL between -1 and +2 ETH
+                simulated_pnl = Decimal(str(random.uniform(-1.0, 2.0)))
+            
+            # Update whale score with simulated trade
+            self.update_whale_score(whale_address, simulated_pnl)
+            
+        logger.info(f"Completed simulation for whale {whale_address}")
     
     def get_whale_stats(self, whale_address: str) -> Optional[WhaleStats]:
         """Get current stats for a whale"""
@@ -474,3 +532,77 @@ class WhaleTracker:
             logger.info(f"Removed whale {whale_address} from tracking")
             return True
         return False
+    
+    def refresh_all_whale_metrics(self, simulate_trades: bool = False) -> None:
+        """Refresh metrics for all tracked whales (useful for DRY_RUN mode)"""
+        logger.info("Refreshing metrics for all tracked whales")
+        
+        for whale_address in list(self.tracked_whales):
+            try:
+                # Get existing whale data from database
+                whale_data = self.db.get_whale(whale_address)
+                if not whale_data:
+                    continue
+                
+                # whale_data columns: address, moralis_roi_pct, roi_usd, trades, cumulative_pnl, 
+                # risk_multiplier, allocation_size, score, win_rate, bootstrap_time, last_refresh
+                moralis_roi_pct = whale_data[1] if whale_data[1] is not None else 0
+                moralis_profit_usd = whale_data[2] if whale_data[2] is not None else 0
+                moralis_trades = whale_data[3] if whale_data[3] is not None else 0
+                
+                # If the performance fields are still 0/default, refresh them
+                if (whale_data[4] == 0 and whale_data[7] == 0):  # cumulative_pnl and score are 0
+                    logger.info(f"Refreshing metrics for whale {whale_address}")
+                    
+                    # Recalculate initial values (same logic as bootstrap)
+                    moralis_roi_decimal = Decimal(str(moralis_roi_pct))
+                    moralis_profit_decimal = Decimal(str(moralis_profit_usd))
+                    
+                    # Calculate improved metrics
+                    base_capital = Decimal("1000")
+                    roi_multiplier = min(max(moralis_roi_decimal / Decimal("100"), Decimal("0.5")), Decimal("2.0"))
+                    new_allocation = float(base_capital * Decimal("0.1") * roi_multiplier)
+                    
+                    if moralis_roi_pct > 50:
+                        new_risk = 1.5
+                    elif moralis_roi_pct > 20:
+                        new_risk = 1.2
+                    elif moralis_roi_pct > 0:
+                        new_risk = 1.0
+                    else:
+                        new_risk = 0.8
+                    
+                    if moralis_trades > 0:
+                        new_score = float(moralis_roi_decimal * (moralis_trades ** 0.5) / 10)
+                    else:
+                        new_score = 0.0
+                    
+                    if moralis_roi_pct > 30:
+                        new_win_rate = 0.7
+                    elif moralis_roi_pct > 10:
+                        new_win_rate = 0.6
+                    elif moralis_roi_pct > 0:
+                        new_win_rate = 0.55
+                    else:
+                        new_win_rate = 0.4
+                    
+                    new_pnl_eth = float(moralis_profit_decimal / Decimal("2000"))
+                    
+                    # Update database with calculated values
+                    self.db.update_whale_performance(
+                        whale_address,
+                        cumulative_pnl=new_pnl_eth,
+                        risk_multiplier=new_risk,
+                        allocation_size=new_allocation,
+                        score=new_score,
+                        win_rate=new_win_rate
+                    )
+                    
+                    # Optionally simulate some trade history
+                    if simulate_trades:
+                        self.simulate_whale_trades(whale_address, num_trades=3)
+                        
+            except Exception as e:
+                logger.error(f"Error refreshing whale {whale_address}: {e}")
+        
+        logger.info("Completed refreshing whale metrics")

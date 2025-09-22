@@ -348,7 +348,9 @@ def create_app(whale_tracker, risk_manager, db_manager, mode: str = "LIVE") -> F
                         "winrate": safe_float(whale_row[8]) * 100,  # win_rate (convert to percentage)
                         "moralis_roi": safe_float(whale_row[1]) if whale_row[1] is not None else None,  # moralis_roi_pct
                         "moralis_profit_usd": safe_float(whale_row[2]) if whale_row[2] is not None else None,  # roi_usd
-                        "moralis_trades": safe_int(whale_row[3]) if whale_row[3] is not None else None  # trades (same as count)
+                        "moralis_trades": safe_int(whale_row[3]) if whale_row[3] is not None else None,  # trades (same as count)
+                        "bootstrap_time": whale_row[9] if whale_row[9] is not None else None,  # bootstrap_time
+                        "last_refresh": whale_row[10] if whale_row[10] is not None else None  # last_refresh
                     })
                 except Exception as e:
                     logger.warning(f"Error processing whale row {whale_row}: {e}")
@@ -457,7 +459,9 @@ def create_app(whale_tracker, risk_manager, db_manager, mode: str = "LIVE") -> F
                         "risk_multiplier": safe_float(whale_row[5], 1.0),  # risk_multiplier
                         "score": safe_float(whale_row[7]),  # score
                         "win_rate": safe_float(whale_row[8]),  # win_rate
-                        "trades": safe_int(whale_row[3])  # trades
+                        "trades": safe_int(whale_row[3]),  # trades
+                        "bootstrap_time": whale_row[9] if whale_row[9] is not None else None,  # bootstrap_time
+                        "last_refresh": whale_row[10] if whale_row[10] is not None else None  # last_refresh
                     })
                 except Exception as e:
                     logger.warning(f"Error processing whale row in API {whale_row}: {e}")

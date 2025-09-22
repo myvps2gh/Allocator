@@ -142,14 +142,34 @@ class DatabaseManager:
         """Save whale data to database"""
         with self.lock:
             try:
-                self.conn.execute("""
-                    INSERT OR REPLACE INTO whales 
-                    (address, moralis_roi_pct, roi_usd, trades, cumulative_pnl, 
-                     risk_multiplier, allocation_size, score, win_rate, last_refresh)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (addr.lower(), float(roi_pct), float(usd), int(trades), 
-                      float(cumulative_pnl), float(risk_multiplier), float(allocation_size),
-                      float(score), float(win_rate), int(time.time())))
+                addr_lower = addr.lower()
+                current_time = int(time.time())
+                
+                # Check if whale already exists to preserve bootstrap_time
+                existing_whale = self.get_whale(addr_lower)
+                
+                if existing_whale:
+                    # Update existing whale, preserve bootstrap_time
+                    bootstrap_time = existing_whale[9]  # bootstrap_time is at index 9
+                    self.conn.execute("""
+                        UPDATE whales 
+                        SET moralis_roi_pct=?, roi_usd=?, trades=?, cumulative_pnl=?, 
+                            risk_multiplier=?, allocation_size=?, score=?, win_rate=?, last_refresh=?
+                        WHERE address=?
+                    """, (float(roi_pct), float(usd), int(trades), float(cumulative_pnl), 
+                          float(risk_multiplier), float(allocation_size), float(score), 
+                          float(win_rate), current_time, addr_lower))
+                else:
+                    # Insert new whale with current time as bootstrap_time
+                    self.conn.execute("""
+                        INSERT INTO whales 
+                        (address, moralis_roi_pct, roi_usd, trades, cumulative_pnl, 
+                         risk_multiplier, allocation_size, score, win_rate, bootstrap_time, last_refresh)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (addr_lower, float(roi_pct), float(usd), int(trades), 
+                          float(cumulative_pnl), float(risk_multiplier), float(allocation_size),
+                          float(score), float(win_rate), current_time, current_time))
+                
                 self.conn.commit()
                 return True
             except sqlite3.Error as e:

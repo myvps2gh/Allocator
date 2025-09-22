@@ -489,12 +489,24 @@ def main():
                        help="Operation mode: LIVE (real trading), DRY_RUN (simulate with Moralis), DRY_RUN_WO_MOR (simulate without Moralis to save CU), DRY_RUN_MEMPOOLHACK (block monitoring), TEST (basic test)")
     parser.add_argument("--config", default="config.json", help="Configuration file")
     parser.add_argument("--no-mempool", action="store_true", help="Use block monitoring instead of mempool")
+    parser.add_argument("--refresh-whales", action="store_true", 
+                       help="Refresh metrics for all tracked whales and exit")
+    parser.add_argument("--simulate-trades", action="store_true",
+                       help="Include trade simulation when refreshing whale metrics")
     
     args = parser.parse_args()
     
     try:
         # Create and run Allocator AI
         allocator = AllocatorAI(args.config)
+        
+        # Handle whale refresh command
+        if args.refresh_whales:
+            logger.info("Refreshing whale metrics...")
+            allocator.whale_tracker.refresh_all_whale_metrics(simulate_trades=args.simulate_trades)
+            logger.info("Whale metrics refresh completed!")
+            return
+        
         allocator.run(mode=args.mode, use_mempool=not args.no_mempool)
         
     except Exception as e:
