@@ -312,23 +312,24 @@ def create_app(whale_tracker, risk_manager, db_manager, mode: str = "LIVE") -> F
     def index():
         """Main dashboard page"""
         try:
-            # Get whale data
+            # Get whale data from database
             whale_data = []
-            for whale_addr in whale_tracker.get_all_tracked_whales():
-                stats = whale_tracker.get_whale_stats(whale_addr)
-                risk_profile = risk_manager.get_whale_risk_profile(whale_addr)
-                
+            db_whales = db_manager.get_all_whales()
+            
+            for whale_row in db_whales:
+                # Database columns: address, moralis_roi_pct, roi_usd, trades, cumulative_pnl, 
+                # risk_multiplier, allocation_size, score, win_rate, bootstrap_time, last_refresh
                 whale_data.append({
-                    "address": whale_addr,
-                    "pnl": float(risk_profile["pnl"]),
-                    "risk": float(risk_profile["risk_multiplier"]),
-                    "allocation": float(risk_profile["pnl"]) * 0.1,  # Convert to float first
-                    "count": stats.trades if stats else 0,
-                    "score": float(stats.score) if stats else 0,
-                    "winrate": float(stats.win_rate) * 100 if stats else 0,
-                    "moralis_roi": float(stats.moralis_roi_pct) if stats and stats.moralis_roi_pct else None,
-                    "moralis_profit_usd": float(stats.moralis_profit_usd) if stats and stats.moralis_profit_usd else None,
-                    "moralis_trades": stats.moralis_trades if stats else None
+                    "address": whale_row[0],  # address
+                    "pnl": whale_row[4] if whale_row[4] is not None else 0.0,  # cumulative_pnl
+                    "risk": whale_row[5] if whale_row[5] is not None else 1.0,  # risk_multiplier
+                    "allocation": whale_row[6] if whale_row[6] is not None else 0.0,  # allocation_size
+                    "count": whale_row[3] if whale_row[3] is not None else 0,  # trades
+                    "score": whale_row[7] if whale_row[7] is not None else 0.0,  # score
+                    "winrate": (whale_row[8] * 100) if whale_row[8] is not None else 0.0,  # win_rate (convert to percentage)
+                    "moralis_roi": whale_row[1] if whale_row[1] is not None else None,  # moralis_roi_pct
+                    "moralis_profit_usd": whale_row[2] if whale_row[2] is not None else None,  # roi_usd
+                    "moralis_trades": whale_row[3] if whale_row[3] is not None else None  # trades (same as count)
                 })
             
             # Sort by PnL
@@ -404,17 +405,18 @@ def create_app(whale_tracker, risk_manager, db_manager, mode: str = "LIVE") -> F
         """API endpoint for whale data"""
         try:
             whale_data = []
-            for whale_addr in whale_tracker.get_all_tracked_whales():
-                stats = whale_tracker.get_whale_stats(whale_addr)
-                risk_profile = risk_manager.get_whale_risk_profile(whale_addr)
-                
+            db_whales = db_manager.get_all_whales()
+            
+            for whale_row in db_whales:
+                # Database columns: address, moralis_roi_pct, roi_usd, trades, cumulative_pnl, 
+                # risk_multiplier, allocation_size, score, win_rate, bootstrap_time, last_refresh
                 whale_data.append({
-                    "address": whale_addr,
-                    "pnl": float(risk_profile["pnl"]),
-                    "risk_multiplier": float(risk_profile["risk_multiplier"]),
-                    "score": float(stats.score) if stats else 0,
-                    "win_rate": float(stats.win_rate) if stats else 0,
-                    "trades": stats.trades if stats else 0
+                    "address": whale_row[0],  # address
+                    "pnl": whale_row[4] if whale_row[4] is not None else 0.0,  # cumulative_pnl
+                    "risk_multiplier": whale_row[5] if whale_row[5] is not None else 1.0,  # risk_multiplier
+                    "score": whale_row[7] if whale_row[7] is not None else 0.0,  # score
+                    "win_rate": whale_row[8] if whale_row[8] is not None else 0.0,  # win_rate
+                    "trades": whale_row[3] if whale_row[3] is not None else 0  # trades
                 })
             
             return jsonify(whale_data)

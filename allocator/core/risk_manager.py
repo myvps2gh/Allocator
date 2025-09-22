@@ -15,10 +15,12 @@ class RiskManager:
     
     def __init__(self, base_risk: Decimal = Decimal("0.05"), 
                  max_risk_multiplier: Decimal = Decimal("3.0"),
-                 min_risk_multiplier: Decimal = Decimal("0.25")):
+                 min_risk_multiplier: Decimal = Decimal("0.25"),
+                 db_manager=None):
         self.base_risk = base_risk
         self.max_risk_multiplier = max_risk_multiplier
         self.min_risk_multiplier = min_risk_multiplier
+        self.db_manager = db_manager
         
         # Track PnL and risk multipliers per whale
         self.whale_pnl = defaultdict(lambda: Decimal("0"))
@@ -43,6 +45,14 @@ class RiskManager:
         
         # Calculate new risk multiplier based on performance
         self._calculate_risk_multiplier(whale_address)
+        
+        # Update database with new risk metrics
+        if self.db_manager:
+            self.db_manager.update_whale_performance(
+                whale_address,
+                cumulative_pnl=float(self.whale_pnl[whale_address]),
+                risk_multiplier=float(self.risk_multipliers[whale_address])
+            )
         
         logger.debug(f"Updated PnL for {whale_address}: {self.whale_pnl[whale_address]}, risk_mult: {self.risk_multipliers[whale_address]}")
     

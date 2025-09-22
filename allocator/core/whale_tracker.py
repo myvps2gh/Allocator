@@ -132,6 +132,14 @@ class WhaleTracker:
             last_updated=time.time()
         )
         
+        # Update database with new performance metrics
+        self.db.update_whale_performance(
+            whale_address,
+            cumulative_pnl=float(total_pnl),
+            score=float(score),
+            win_rate=float(win_rate)
+        )
+        
         logger.debug(f"Updated whale {whale_address}: score={score:.4f}, roi={total_pnl:.4f}, win_rate={win_rate:.2%}")
         
         return self.whale_scores[whale_address]
@@ -271,12 +279,29 @@ class WhaleTracker:
         self.whale_scores[whale_address].moralis_trades = moralis_data["total_trades"]
         self.tracked_whales.add(whale_address)
         
-        # Save to database
+        # Calculate additional metrics for database storage
+        # Get current whale stats (will be default/empty for new whales)
+        whale_stats = self.get_whale_stats(whale_address)
+        
+        # Calculate initial allocation size (simplified calculation)
+        # Base allocation as 10% of estimated capital allocation
+        base_capital = Decimal("1000")  # Default base capital for calculation
+        initial_allocation = float(base_capital * Decimal("0.1"))
+        
+        # Initial risk multiplier (will be updated as trades occur)
+        initial_risk = 1.0
+        
+        # Save to database with additional fields
         self.db.save_whale(
             whale_address,
             float(moralis_data["realized_pct"]),
             float(moralis_data["realized_usd"]),
-            moralis_data["total_trades"]
+            moralis_data["total_trades"],
+            cumulative_pnl=float(whale_stats.roi) if whale_stats else 0.0,
+            risk_multiplier=initial_risk,
+            allocation_size=initial_allocation,
+            score=float(whale_stats.score) if whale_stats else 0.0,
+            win_rate=float(whale_stats.win_rate) if whale_stats else 0.0
         )
         
         logger.info(f"Added whale {whale_address} to tracking: {moralis_data['realized_pct']}% ROI, ${moralis_data['realized_usd']} profit")
@@ -374,7 +399,7 @@ class WhaleTracker:
             blocks_back = percentile_config.get("blocks_back", 10000)
             
             logger.info(f"Running adaptive discovery: top {activity_percentile}% activity, "
-                       f"top {profit_percentile}% profit over {blocks_back} blocks")
+                       f"top {profit_percentile}% profit over {blocks_back} blocks (sampling every 5th block)")
             
             # Run adaptive discovery
             result = self.adaptive_engine.discover_whales_percentile(

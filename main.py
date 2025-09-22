@@ -74,7 +74,8 @@ class AllocatorAI:
         self.risk_manager = RiskManager(
             self.config.trading.base_risk,
             max_risk_multiplier=3.0,
-            min_risk_multiplier=0.25
+            min_risk_multiplier=0.25,
+            db_manager=self.db_manager
         )
         
         self.allocation_engine = AllocationEngine(

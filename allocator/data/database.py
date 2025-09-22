@@ -45,6 +45,11 @@ class DatabaseManager:
             moralis_roi_pct REAL,
             roi_usd REAL,
             trades INTEGER,
+            cumulative_pnl REAL DEFAULT 0.0,
+            risk_multiplier REAL DEFAULT 1.0,
+            allocation_size REAL DEFAULT 0.0,
+            score REAL DEFAULT 0.0,
+            win_rate REAL DEFAULT 0.0,
             bootstrap_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             last_refresh TIMESTAMP
         )
@@ -95,15 +100,20 @@ class DatabaseManager:
                 logger.error(f"Database error getting whale {addr}: {e}")
                 return None
     
-    def save_whale(self, addr: str, roi_pct: float, usd: float, trades: int) -> bool:
+    def save_whale(self, addr: str, roi_pct: float, usd: float, trades: int, 
+                   cumulative_pnl: float = 0.0, risk_multiplier: float = 1.0, 
+                   allocation_size: float = 0.0, score: float = 0.0, win_rate: float = 0.0) -> bool:
         """Save whale data to database"""
         with self.lock:
             try:
                 self.conn.execute("""
                     INSERT OR REPLACE INTO whales 
-                    (address, moralis_roi_pct, roi_usd, trades, last_refresh)
-                    VALUES (?, ?, ?, ?, ?)
-                """, (addr.lower(), float(roi_pct), float(usd), int(trades), int(time.time())))
+                    (address, moralis_roi_pct, roi_usd, trades, cumulative_pnl, 
+                     risk_multiplier, allocation_size, score, win_rate, last_refresh)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (addr.lower(), float(roi_pct), float(usd), int(trades), 
+                      float(cumulative_pnl), float(risk_multiplier), float(allocation_size),
+                      float(score), float(win_rate), int(time.time())))
                 self.conn.commit()
                 return True
             except sqlite3.Error as e:
@@ -119,6 +129,56 @@ class DatabaseManager:
             except sqlite3.Error as e:
                 logger.error(f"Database error getting all whales: {e}")
                 return []
+    
+    def update_whale_performance(self, addr: str, cumulative_pnl: float = None, 
+                                risk_multiplier: float = None, allocation_size: float = None,
+                                score: float = None, win_rate: float = None) -> bool:
+        """Update whale performance metrics in database"""
+        with self.lock:
+            try:
+                # Build dynamic query based on provided parameters
+                update_fields = []
+                values = []
+                
+                if cumulative_pnl is not None:
+                    update_fields.append("cumulative_pnl = ?")
+                    values.append(float(cumulative_pnl))
+                
+                if risk_multiplier is not None:
+                    update_fields.append("risk_multiplier = ?")
+                    values.append(float(risk_multiplier))
+                
+                if allocation_size is not None:
+                    update_fields.append("allocation_size = ?")
+                    values.append(float(allocation_size))
+                
+                if score is not None:
+                    update_fields.append("score = ?")
+                    values.append(float(score))
+                
+                if win_rate is not None:
+                    update_fields.append("win_rate = ?")
+                    values.append(float(win_rate))
+                
+                if not update_fields:
+                    return True  # Nothing to update
+                
+                # Add address and timestamp
+                values.append(int(time.time()))
+                values.append(addr.lower())
+                
+                query = f"""
+                    UPDATE whales 
+                    SET {', '.join(update_fields)}, last_refresh = ?
+                    WHERE address = ?
+                """
+                
+                self.conn.execute(query, values)
+                self.conn.commit()
+                return True
+            except sqlite3.Error as e:
+                logger.error(f"Database error updating whale performance {addr}: {e}")
+                return False
     
     def save_trade(self, trade_data: dict) -> bool:
         """Save trade data to database"""
