@@ -755,7 +755,7 @@ class WhaleTracker:
                 "limit": 50  # Conservative limit to avoid API errors
             }
             
-            logger.debug(f"Calling Moralis token transfers API for {whale_address}")
+            logger.info(f"Calling Moralis token transfers API for {whale_address}")
             response = requests.get(token_transfers_url, headers=headers, params=params, timeout=30)
             
             if response.status_code == 400:
@@ -783,12 +783,18 @@ class WhaleTracker:
             data = response.json()
             transfers = data.get("result", [])
             
+            logger.info(f"Moralis returned {len(transfers)} transfers for whale {whale_address}")
+            
             if not transfers:
                 logger.info(f"No token transfers found for whale {whale_address}")
                 return
             
             # Analyze transfers to build token PnL estimates
-            token_activity = defaultdict(lambda: {"in_value": 0, "out_value": 0, "trades": 0})
+            token_activity = defaultdict(lambda: {"in_value": 0, "out_value": 0, "trades": 0, "address": ""})
+            
+            processed_transfers = 0
+            skipped_dust = 0
+            skipped_unrelated = 0
             
             for transfer in transfers:
                 try:
@@ -798,8 +804,13 @@ class WhaleTracker:
                     to_address = transfer.get("to_address", "").lower()
                     value = float(transfer.get("value_formatted", 0) or 0)
                     
+                    # Debug first few transfers
+                    if processed_transfers < 3:
+                        logger.debug(f"Transfer {processed_transfers}: {token_symbol} from {from_address[:10]}... to {to_address[:10]}... value: {value}")
+                    
                     # Skip very small transfers (likely dust)
                     if value < 0.0001:
+                        skipped_dust += 1
                         continue
                     
                     # Track inflows and outflows
@@ -807,18 +818,22 @@ class WhaleTracker:
                         # Whale selling/sending tokens
                         token_activity[token_symbol]["out_value"] += value
                         token_activity[token_symbol]["trades"] += 1
+                        token_activity[token_symbol]["address"] = token_address
+                        processed_transfers += 1
                     elif to_address == whale_address:
                         # Whale buying/receiving tokens
                         token_activity[token_symbol]["in_value"] += value
                         token_activity[token_symbol]["trades"] += 1
-                    
-                    # Store token address for the first occurrence
-                    if not hasattr(token_activity[token_symbol], 'address'):
-                        token_activity[token_symbol]['address'] = token_address
+                        token_activity[token_symbol]["address"] = token_address
+                        processed_transfers += 1
+                    else:
+                        skipped_unrelated += 1
                         
                 except Exception as e:
                     logger.debug(f"Error processing transfer: {e}")
                     continue
+            
+            logger.info(f"Processed {processed_transfers} transfers, skipped {skipped_dust} dust, {skipped_unrelated} unrelated")
             
             # Convert activity to PnL estimates and store in database
             tokens_added = 0
@@ -838,13 +853,15 @@ class WhaleTracker:
                 estimated_pnl_pct = min(0.15, max(0.01, trade_count / 100))  # 1-15% based on activity
                 estimated_pnl = net_volume * estimated_pnl_pct
                 
-                if estimated_pnl > 0.001:  # Only store meaningful PnL
+                logger.debug(f"Token {token_symbol}: volume={net_volume:.4f}, trades={trade_count}, est_pnl={estimated_pnl:.6f}")
+                
+                if estimated_pnl > 0.0001:  # Lower threshold to catch more activity
                     # Convert to ETH equivalent (rough approximation)
                     if token_symbol in ["USDC", "USDT", "DAI"]:
                         estimated_pnl_eth = estimated_pnl / 2000  # USD to ETH
                     elif token_symbol == "WBTC":
                         estimated_pnl_eth = estimated_pnl * 15    # BTC to ETH (rough ratio)
-                    elif token_symbol == "ETH":
+                    elif token_symbol == "ETH" or token_symbol == "WETH":
                         estimated_pnl_eth = estimated_pnl
                     else:
                         estimated_pnl_eth = estimated_pnl * 0.001  # Alt coins to ETH (very rough)
@@ -857,6 +874,8 @@ class WhaleTracker:
                     total_estimated_pnl += estimated_pnl_eth
                     
                     logger.debug(f"  {token_symbol}: {estimated_pnl_eth:.6f} ETH PnL ({trade_count} trades)")
+                else:
+                    logger.debug(f"  {token_symbol}: Skipped - PnL too small ({estimated_pnl:.6f})")
             
             if tokens_added > 0:
                 logger.info(f"Fetched token data for whale {whale_address}: "
