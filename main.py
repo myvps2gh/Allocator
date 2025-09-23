@@ -497,6 +497,8 @@ def main():
                        help="Recalculate all whale scores using Score Formula v2.0 and exit")
     parser.add_argument("--fetch-tokens", action="store_true",
                        help="Fetch real token-level data from Moralis for all whales and exit")
+    parser.add_argument("--clear-tokens", action="store_true",
+                       help="Clear all whale token data and exit")
     
     args = parser.parse_args()
     
@@ -587,6 +589,19 @@ def main():
                     logger.error(f"Error recalculating score for {whale_address}: {e}")
             
             logger.info(f"Score recalculation completed! Updated {updated_count}/{len(allocator.whale_tracker.tracked_whales)} whales.")
+            return
+        
+        # Handle clear tokens command
+        if args.clear_tokens:
+            logger.info("Clearing all whale token data...")
+            
+            # Clear the whale_token_pnl table
+            with allocator.db_manager.lock:
+                cursor = allocator.db_manager.conn.execute("DELETE FROM whale_token_pnl")
+                deleted_count = cursor.rowcount
+                allocator.db_manager.conn.commit()
+            
+            logger.info(f"Cleared {deleted_count} token records from database")
             return
         
         # Handle token data fetching command
