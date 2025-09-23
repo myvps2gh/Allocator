@@ -400,6 +400,20 @@ DASHBOARD_TEMPLATE = """
         
         console.log('=== DASHBOARD DEBUG END ===');
         
+        // Monitor for CSS changes that might hide elements
+        setTimeout(function() {
+            console.log('=== 2 SECOND CHECK ===');
+            console.log('- Total tables:', document.querySelectorAll('table').length);
+            console.log('- Table containers:', document.querySelectorAll('.table-container').length);
+            
+            document.querySelectorAll('.table-container').forEach((container, index) => {
+                const h2 = container.querySelector('h2');
+                const table = container.querySelector('table');
+                const style = window.getComputedStyle(container);
+                console.log(`Container ${index}: "${h2?.textContent.trim()}" | Visible: ${style.display !== 'none' && style.visibility !== 'hidden'} | Display: ${style.display}`);
+            });
+        }, 2000);
+        
         // ALL AUTO-REFRESH AND MONITORING DISABLED
         
         // Toggle token breakdown display
