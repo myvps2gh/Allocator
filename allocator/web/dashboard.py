@@ -3,7 +3,8 @@ Web dashboard for Allocator AI
 """
 
 import logging
-from flask import Flask, render_template_string, jsonify, request
+import time
+from flask import Flask, render_template_string, jsonify, request, make_response
 from typing import Dict, Any, List
 from decimal import Decimal
 
@@ -500,7 +501,7 @@ def create_app(whale_tracker, risk_manager, db_manager, mode: str = "LIVE") -> F
                         "last_run_duration": None
                     })
             
-            return render_template_string(
+            response = make_response(render_template_string(
                 DASHBOARD_TEMPLATE,
                 whales=whale_data,
                 trades=trades_data,
@@ -510,7 +511,22 @@ def create_app(whale_tracker, risk_manager, db_manager, mode: str = "LIVE") -> F
                 whale_count=len(whale_data),
                 trade_count=stats["trade_count"],
                 mode=mode
-            )
+            ))
+            
+            # Disable all caching to prevent browser issues
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+            
+            page_id = int(time.time() * 1000)  # Unique timestamp
+            print(f"Returning dashboard [ID:{page_id}] with {len(whale_data)} whales and {len(discovery_status)} discovery modes")
+            
+            # Add the page ID to the response as a comment for debugging
+            response_data = response.get_data(as_text=True)
+            response_data = response_data.replace("</body>", f"<!-- Page ID: {page_id} -->\n</body>")
+            response.set_data(response_data)
+            
+            return response
             
         except Exception as e:
             logger.error(f"Dashboard error: {e}")
