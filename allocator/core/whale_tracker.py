@@ -740,15 +740,30 @@ class WhaleTracker:
                 logger.warning(f"Rate limited for Moralis API call for {whale_address}")
                 return
             
-            # Fetch token transfers for the whale - this gives us token-level activity
-            token_transfers_url = f"https://deep-index.moralis.io/api/v2.2/{whale_address}/erc20/transfers"
+            # Try the new profitability endpoint first
+            profitability_url = f"https://deep-index.moralis.io/api/v2.2/wallets/{whale_address}/profitability"
             
             headers = {
                 "X-API-Key": self.moralis_api_key,
                 "Content-Type": "application/json"
             }
             
-            # Get transfers from last 30 days with conservative limit for free tier
+            # Try profitability endpoint first
+            params = {"chain": "eth"}
+            logger.info(f"Calling Moralis profitability API for {whale_address}")
+            response = requests.get(profitability_url, headers=headers, params=params, timeout=30)
+            
+            if response.status_code == 200:
+                # Process profitability data
+                if self._process_profitability_data(whale_address, response.json()):
+                    return
+                else:
+                    logger.warning(f"Could not process profitability data for {whale_address}, falling back to transfers")
+            else:
+                logger.warning(f"Profitability API failed ({response.status_code}) for {whale_address}, falling back to transfers: {response.text}")
+            
+            # Fallback to token transfers method
+            token_transfers_url = f"https://deep-index.moralis.io/api/v2.2/{whale_address}/erc20/transfers"
             params = {
                 "chain": "eth", 
                 "from_date": "2024-08-01",  # Adjust based on your needs
@@ -802,14 +817,30 @@ class WhaleTracker:
                     token_address = transfer.get("token_address", "")
                     from_address = transfer.get("from_address", "").lower()
                     to_address = transfer.get("to_address", "").lower()
-                    value = float(transfer.get("value_formatted", 0) or 0)
                     
-                    # Debug first few transfers
-                    if processed_transfers < 3:
-                        logger.debug(f"Transfer {processed_transfers}: {token_symbol} from {from_address[:10]}... to {to_address[:10]}... value: {value}")
+                    # Try multiple value fields - Moralis API might use different field names
+                    value = None
+                    for value_field in ["value_formatted", "value", "amount"]:
+                        raw_value = transfer.get(value_field)
+                        if raw_value is not None:
+                            try:
+                                value = float(raw_value)
+                                break
+                            except (ValueError, TypeError):
+                                continue
                     
-                    # Skip very small transfers (likely dust)
-                    if value < 0.0001:
+                    if value is None:
+                        value = 0.0
+                    
+                    # Debug first few transfers to understand the data format
+                    if processed_transfers + skipped_dust < 5:
+                        logger.info(f"Transfer sample: {token_symbol} from {from_address[:10]}... to {to_address[:10]}... value: {value}")
+                        logger.info(f"  Whale address: {whale_address[:10]}...")
+                        if processed_transfers + skipped_dust == 0:
+                            logger.debug(f"  Raw transfer data: {transfer}")
+                    
+                    # More lenient dust filter - tokens might have different decimal places
+                    if value < 0.000001:  # Much lower threshold
                         skipped_dust += 1
                         continue
                     
@@ -888,4 +919,124 @@ class WhaleTracker:
         except Exception as e:
             logger.error(f"Error fetching token data from Moralis for {whale_address}: {e}")
             return
+    
+    def _process_profitability_data(self, whale_address: str, data) -> bool:
+        """Process the profitability API response"""
+        try:
+            logger.info(f"Profitability API response structure: {list(data.keys()) if isinstance(data, dict) else type(data)}")
+            logger.debug(f"Sample profitability data: {data}")
+            
+            # We need to discover the structure first
+            # Common structures might be:
+            # - data["tokens"] or data["result"]["tokens"] 
+            # - direct list of token profitability
+            # - nested structure with token addresses/symbols
+            
+            tokens_data = None
+            if isinstance(data, dict):
+                # Try common field names
+                for field in ["tokens", "result", "data", "profitability", "portfolio", "holdings"]:
+                    if field in data:
+                        tokens_data = data[field]
+                        break
+                
+                # If it's a direct dict with token info (token addresses as keys)
+                if tokens_data is None and any(key for key in data.keys() if len(key) == 42 and key.startswith('0x')):
+                    tokens_data = data
+                    
+                # If it has direct token symbol keys
+                if tokens_data is None and any(key for key in data.keys() if key.isupper() and len(key) <= 10):
+                    tokens_data = data
+            elif isinstance(data, list):
+                tokens_data = data
+            
+            if not tokens_data:
+                logger.warning("Could not find token data in profitability response")
+                return False
+            
+            meaningful_tokens = 0
+            
+            if isinstance(tokens_data, dict):
+                # Process as dict of token address/symbol -> data
+                for token_key, token_info in tokens_data.items():
+                    if self._store_profitability_token(whale_address, token_key, token_info):
+                        meaningful_tokens += 1
+            elif isinstance(tokens_data, list):
+                # Process as list of token objects
+                for token_info in tokens_data:
+                    if self._store_profitability_token(whale_address, None, token_info):
+                        meaningful_tokens += 1
+            
+            if meaningful_tokens == 0:
+                # Add a marker to indicate this whale has been processed (no meaningful tokens)
+                self.db.update_whale_token_pnl(whale_address, "PROCESSED", "", 0.0, 0)
+                logger.info(f"No meaningful token activity found for whale {whale_address}")
+            else:
+                logger.info(f"Stored {meaningful_tokens} tokens from profitability data for whale {whale_address}")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error processing profitability data: {e}")
+            return False
+    
+    def _store_profitability_token(self, whale_address: str, token_key: str, token_info) -> bool:
+        """Store a single token's profitability data"""
+        try:
+            # Extract token information
+            if isinstance(token_info, dict):
+                # Extract common fields (structure to be determined from actual API response)
+                token_symbol = token_info.get("symbol", token_info.get("token_symbol", token_key if token_key and not token_key.startswith('0x') else "UNKNOWN"))
+                token_address = token_info.get("address", token_info.get("token_address", token_key if token_key and token_key.startswith('0x') else ""))
+                
+                # Look for PnL/profit fields - try various common field names
+                pnl = None
+                for pnl_field in ["pnl", "profit", "total_pnl", "realized_pnl", "unrealized_pnl", "profit_loss", "net_profit", "total_profit"]:
+                    if pnl_field in token_info:
+                        try:
+                            pnl = float(token_info[pnl_field])
+                            break
+                        except (ValueError, TypeError):
+                            continue
+                
+                # Look for trade count
+                trades = token_info.get("trades", token_info.get("trade_count", token_info.get("transactions", token_info.get("tx_count", 1))))
+                try:
+                    trades = int(trades)
+                except (ValueError, TypeError):
+                    trades = 1
+                
+                # If no direct PnL, try to calculate from buy/sell values
+                if pnl is None:
+                    buy_value = token_info.get("buy_value", token_info.get("total_buy", token_info.get("invested", 0)))
+                    sell_value = token_info.get("sell_value", token_info.get("total_sell", token_info.get("realized", 0)))
+                    try:
+                        buy_value = float(buy_value) if buy_value else 0
+                        sell_value = float(sell_value) if sell_value else 0
+                        if buy_value > 0 or sell_value > 0:
+                            pnl = sell_value - buy_value
+                    except (ValueError, TypeError):
+                        pass
+                
+            elif isinstance(token_info, (int, float)):
+                # Simple value, assume it's the PnL
+                pnl = float(token_info)
+                token_symbol = token_key if token_key and not token_key.startswith('0x') else "UNKNOWN"
+                token_address = token_key if token_key and token_key.startswith('0x') else ""
+                trades = 1
+            else:
+                logger.warning(f"Unexpected token_info type: {type(token_info)}")
+                return False
+            
+            # Store if meaningful
+            if pnl is not None and (abs(pnl) > 0.0001 or trades >= 2):
+                self.db.update_whale_token_pnl(whale_address, token_symbol, token_address, pnl, trades)
+                logger.debug(f"Stored {token_symbol}: PnL={pnl:.6f}, trades={trades}")
+                return True
+                
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error storing profitability token data: {e}")
+            return False
     
