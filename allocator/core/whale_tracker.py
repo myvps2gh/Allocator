@@ -740,25 +740,30 @@ class WhaleTracker:
                 logger.warning(f"Rate limited for Moralis API call for {whale_address}")
                 return
             
-            # Try the new profitability endpoint first - this gives us actual realized PnL per token!
-            profitability_url = f"https://deep-index.moralis.io/api/v2.2/wallets/{whale_address}/profitability/breakdown"
+            # Try the profitability breakdown endpoint - this gives us actual realized PnL per token!
+            profitability_url = f"https://deep-index.moralis.io/api/v2.2/wallets/{whale_address}/profitability"
             
             headers = {
-                "X-API-Key": self.moralis_api_key,
-                "Content-Type": "application/json"
+                "X-API-Key": self.moralis_api_key
             }
             
-            # Try profitability breakdown endpoint first
-            params = {"chain": "eth"}
+            # Call the breakdown endpoint (not summary) to get the token array
             logger.info(f"Calling Moralis profitability breakdown API for {whale_address}")
-            response = requests.get(profitability_url, headers=headers, params=params, timeout=30)
+            response = requests.get(profitability_url, headers=headers, timeout=30)
             
             if response.status_code == 200:
-                # Process profitability data
-                if self._process_profitability_breakdown(whale_address, response.json()):
-                    return
+                data = response.json()
+                logger.debug(f"Profitability breakdown response keys: {list(data.keys()) if isinstance(data, dict) else type(data)}")
+                
+                # The breakdown endpoint returns: {"result": [array of token objects]}
+                if "result" in data and isinstance(data["result"], list):
+                    # Process the token breakdown from the result array
+                    if self._process_profitability_breakdown(whale_address, data):
+                        return
                 else:
-                    logger.warning(f"Could not process profitability data for {whale_address}, falling back to transfers")
+                    logger.warning(f"Unexpected profitability breakdown structure for {whale_address}: {list(data.keys())}")
+                
+                logger.warning(f"Could not process profitability data for {whale_address}, falling back to transfers")
             else:
                 logger.warning(f"Profitability API failed ({response.status_code}) for {whale_address}, falling back to transfers: {response.text}")
             
