@@ -969,7 +969,7 @@ class WhaleTracker:
             
             if meaningful_tokens == 0:
                 # Add a marker to indicate this whale has been processed (no meaningful tokens)
-                self.db.update_whale_token_pnl(whale_address, "PROCESSED", "", 0.0, 0)
+                self.db.update_whale_token_pnl(whale_address, "PROCESSED", 0.0, "")
                 logger.info(f"No meaningful token activity found for whale {whale_address}")
             else:
                 logger.info(f"Stored {meaningful_tokens} tokens from profitability data for whale {whale_address}")
@@ -1030,7 +1030,7 @@ class WhaleTracker:
             
             # Store if meaningful
             if pnl is not None and (abs(pnl) > 0.0001 or trades >= 2):
-                self.db.update_whale_token_pnl(whale_address, token_symbol, token_address, pnl, trades)
+                self.db.update_whale_token_pnl(whale_address, token_symbol, pnl, token_address)
                 logger.debug(f"Stored {token_symbol}: PnL={pnl:.6f}, trades={trades}")
                 return True
                 
