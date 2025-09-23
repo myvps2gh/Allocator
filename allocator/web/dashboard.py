@@ -379,68 +379,28 @@ DASHBOARD_TEMPLATE = """
     </div>
 
     <script>
-        // Debug: Track any DOM changes
+        // DEBUG: What is actually happening?
+        console.log('=== DASHBOARD DEBUG START ===');
         console.log('Page loaded at:', new Date().toISOString());
-        console.log('Initial table count:', document.querySelectorAll('table').length);
-        const whalePerformanceSection = Array.from(document.querySelectorAll('h2')).find(h => h.textContent.includes('Whale Performance'));
-        console.log('Whale Performance section exists:', whalePerformanceSection !== undefined);
+        console.log('URL:', window.location.href);
+        console.log('User Agent:', navigator.userAgent);
         
-        // Debug table containers
-        const tableContainers = document.querySelectorAll('.table-container');
-        console.log('Table containers found:', tableContainers.length);
-        tableContainers.forEach((container, index) => {
+        // Check DOM immediately
+        console.log('Initial DOM state:');
+        console.log('- Total tables:', document.querySelectorAll('table').length);
+        console.log('- Table containers:', document.querySelectorAll('.table-container').length);
+        
+        // List all table containers
+        document.querySelectorAll('.table-container').forEach((container, index) => {
             const h2 = container.querySelector('h2');
             const table = container.querySelector('table');
-            console.log(`Container ${index}: "${h2 ? h2.textContent.trim() : 'NO H2'}", has table: ${table !== null}`);
+            const headers = table ? Array.from(table.querySelectorAll('thead th')).map(h => h.textContent.trim()) : [];
+            console.log(`Container ${index}: "${h2?.textContent.trim()}" | Table: ${!!table} | Headers: [${headers.join(', ')}]`);
         });
         
-        console.log('Main whale table exists:', document.querySelector('.table-container:nth-of-type(2) > table') !== null);
+        console.log('=== DASHBOARD DEBUG END ===');
         
-        // Try alternative selectors
-        const whaleTable2 = whalePerformanceSection ? whalePerformanceSection.parentElement.querySelector('table') : null;
-        console.log('Alternative selector (parent element) works:', whaleTable2 !== null);
-        
-        if (whaleTable2) {
-            const headers = whaleTable2.querySelectorAll('thead th');
-            console.log('Found whale table headers:', Array.from(headers).map(h => h.textContent.trim()));
-        }
-        
-        // Monitor for any DOM mutations
-        const observer = new MutationObserver(function(mutations) {
-            mutations.forEach(function(mutation) {
-                console.log('DOM mutation detected:', mutation.type, mutation.target);
-                if (mutation.type === 'childList') {
-                    console.log('Nodes added:', mutation.addedNodes.length);
-                    console.log('Nodes removed:', mutation.removedNodes.length);
-                }
-            });
-        });
-        
-        // Start observing
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true,
-            attributes: true,
-            attributeOldValue: true
-        });
-        
-        // Check for any auto-refresh mechanisms we missed
-        console.log('setInterval count:', setInterval.length || 'undefined');
-        console.log('setTimeout count:', setTimeout.length || 'undefined');
-        
-        // Log table structure every 2 seconds
-        setInterval(function() {
-            const tables = document.querySelectorAll('table');
-            const mainWhaleTable = document.querySelector('.table-container:nth-of-type(2) > table');
-            const tokenTables = document.querySelectorAll('.token-table-div');
-            console.log(`Total tables: ${tables.length}, Token tables: ${tokenTables.length}, Main whale table exists: ${mainWhaleTable !== null}`);
-            if (mainWhaleTable) {
-                const headers = mainWhaleTable.querySelectorAll('thead th');
-                console.log(`Main whale table headers: ${headers.length}`, Array.from(headers).map(h => h.textContent));
-            }
-        }, 2000);
-        
-        // Auto-refresh completely removed to prevent table conflicts
+        // ALL AUTO-REFRESH AND MONITORING DISABLED
         
         // Toggle token breakdown display
         function toggleTokens(whaleAddress) {
