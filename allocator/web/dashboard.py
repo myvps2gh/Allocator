@@ -367,10 +367,77 @@ DASHBOARD_TEMPLATE = """
     </div>
 
     <script>
-        // Auto-refresh every 30 seconds
-        setTimeout(function() {
-            location.reload();
+        // Auto-refresh data every 30 seconds without full page reload
+        setInterval(function() {
+            fetch('/api/whales')
+                .then(response => response.json())
+                .then(data => {
+                    updateWhaleTable(data);
+                })
+                .catch(error => console.error('Error updating whale data:', error));
         }, 30000);
+        
+        function updateWhaleTable(whales) {
+            const tbody = document.querySelector('table tbody');
+            if (!tbody) return;
+            
+            // Clear existing rows
+            tbody.innerHTML = '';
+            
+            // Add updated whale rows
+            whales.forEach(whale => {
+                createWhaleRow(whale, tbody);
+            });
+        }
+        
+        function createWhaleRow(w, tbody) {
+            const row = document.createElement('tr');
+            const statusClass = w.moralis_roi !== null && w.moralis_roi >= 20 ? 'whale-row-profitable' :
+                               w.moralis_roi !== null && w.moralis_roi > 0 ? 'whale-row-medium' : 'whale-row-risky';
+            row.className = statusClass;
+            
+            const pnlClass = w.pnl > 0 ? 'positive' : w.pnl < 0 ? 'negative' : 'neutral';
+            
+            row.innerHTML = `
+                <td><span class="status-indicator status-online"></span>${w.address.substring(0,6)}...${w.address.slice(-4)}</td>
+                <td class="${pnlClass}">${w.pnl.toFixed(4)}</td>
+                <td>${w.risk.toFixed(2)}x</td>
+                <td>${w.allocation.toFixed(4)} ETH</td>
+                <td>${w.count}</td>
+                <td><strong>${w.score.toFixed(2)}</strong></td>
+                <td>${w.winrate.toFixed(0)}%</td>
+                <td>${w.moralis_roi !== null ? w.moralis_roi.toFixed(2) + '%' : 'N/A'}</td>
+                <td>${w.moralis_profit_usd !== null ? w.moralis_profit_usd.toFixed(2) + '$' : 'N/A'}</td>
+                <td>${w.tokens.length} tokens</td>
+                <td><button class="btn-expand" onclick="toggleTokens('${w.address}')">Show Tokens</button></td>
+            `;
+            
+            // Add token breakdown row
+            const tokenRow = document.createElement('tr');
+            tokenRow.id = `tokens-${w.address}`;
+            tokenRow.className = 'token-breakdown';
+            tokenRow.style.display = 'none';
+            
+            let tokenContent = `<div class="token-details"><h4>Token Breakdown for ${w.address.substring(0,6)}...${w.address.slice(-4)}</h4>`;
+            if (w.tokens && w.tokens.length > 0) {
+                tokenContent += `<table class="token-table"><thead><tr><th>Token</th><th>PnL (ETH)</th><th>Trades</th><th>Weight</th></tr></thead><tbody>`;
+                w.tokens.forEach(token => {
+                    const tokenPnlClass = token.pnl > 0 ? 'positive' : token.pnl < 0 ? 'negative' : 'neutral';
+                    const weight = w.pnl > 0 ? ((token.pnl / w.pnl) * 100).toFixed(1) : '0.0';
+                    tokenContent += `<tr><td><strong>${token.symbol}</strong></td><td class="${tokenPnlClass}">${token.pnl.toFixed(4)}</td><td>${token.trades}</td><td>${weight}%</td></tr>`;
+                });
+                tokenContent += `</tbody></table>`;
+            } else {
+                tokenContent += `<p>No token-level data available yet.</p>`;
+            }
+            tokenContent += `</div>`;
+            
+            tokenRow.innerHTML = `<td colspan="11">${tokenContent}</td>`;
+            
+            // Insert both rows
+            tbody.appendChild(row);
+            tbody.appendChild(tokenRow);
+        }
         
         // Toggle token breakdown display
         function toggleTokens(whaleAddress) {
