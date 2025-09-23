@@ -149,19 +149,34 @@ DASHBOARD_TEMPLATE = """
         .token-details {
             padding: 20px;
         }
-        .token-table {
+        .token-table-div {
             width: 100%;
-            margin-top: 10px;
+            margin: 10px 0;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            overflow: hidden;
             font-size: 0.9em;
         }
-        .token-table th {
+        .token-header {
+            display: flex;
             background: #e9ecef;
-            padding: 8px;
-            font-size: 0.8em;
-        }
-        .token-table td {
-            padding: 8px;
+            font-weight: bold;
             border-bottom: 1px solid #dee2e6;
+        }
+        .token-row {
+            display: flex;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .token-row:last-child {
+            border-bottom: none;
+        }
+        .token-col {
+            flex: 1;
+            padding: 8px;
+            text-align: left;
+        }
+        .token-col:first-child {
+            flex: 1.5;
         }
         @media (max-width: 768px) {
             .header {
@@ -296,34 +311,30 @@ DASHBOARD_TEMPLATE = """
                         <div class="token-details">
                             <h4>Token Breakdown for {{ w.address[:6] }}...{{ w.address[-4:] }}</h4>
                             {% if w.tokens %}
-                            <table class="token-table">
-                                <thead>
-                                    <tr>
-                                        <th>Token</th>
-                                        <th>PnL (ETH)</th>
-                                        <th>Trades</th>
-                                        <th>Weight</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for token in w.tokens %}
-                                    <tr>
-                                        <td><strong>{{ token.symbol }}</strong></td>
-                                        <td class="{{ 'positive' if token.pnl > 0 else 'negative' if token.pnl < 0 else 'neutral' }}">
-                                            {{ '%.4f' | format(token.pnl) }}
-                                        </td>
-                                        <td>{{ token.trades }}</td>
-                                        <td>
-                                            {% if w.pnl > 0 %}
-                                                {{ '%.1f' | format((token.pnl / w.pnl) * 100) }}%
-                                            {% else %}
-                                                N/A
-                                            {% endif %}
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
+                            <div class="token-table-div">
+                                <div class="token-header">
+                                    <span class="token-col">Token</span>
+                                    <span class="token-col">PnL (ETH)</span>
+                                    <span class="token-col">Trades</span>
+                                    <span class="token-col">Weight</span>
+                                </div>
+                                {% for token in w.tokens %}
+                                <div class="token-row">
+                                    <span class="token-col"><strong>{{ token.symbol }}</strong></span>
+                                    <span class="token-col {{ 'positive' if token.pnl > 0 else 'negative' if token.pnl < 0 else 'neutral' }}">
+                                        {{ '%.4f' | format(token.pnl) }}
+                                    </span>
+                                    <span class="token-col">{{ token.trades }}</span>
+                                    <span class="token-col">
+                                        {% if w.pnl > 0 %}
+                                            {{ '%.1f' | format((token.pnl / w.pnl) * 100) }}%
+                                        {% else %}
+                                            N/A
+                                        {% endif %}
+                                    </span>
+                                </div>
+                                {% endfor %}
+                            </div>
                             {% else %}
                             <p>No token-level data available yet.</p>
                             {% endif %}
@@ -373,7 +384,26 @@ DASHBOARD_TEMPLATE = """
         console.log('Initial table count:', document.querySelectorAll('table').length);
         const whalePerformanceSection = Array.from(document.querySelectorAll('h2')).find(h => h.textContent.includes('Whale Performance'));
         console.log('Whale Performance section exists:', whalePerformanceSection !== undefined);
+        
+        // Debug table containers
+        const tableContainers = document.querySelectorAll('.table-container');
+        console.log('Table containers found:', tableContainers.length);
+        tableContainers.forEach((container, index) => {
+            const h2 = container.querySelector('h2');
+            const table = container.querySelector('table');
+            console.log(`Container ${index}: "${h2 ? h2.textContent.trim() : 'NO H2'}", has table: ${table !== null}`);
+        });
+        
         console.log('Main whale table exists:', document.querySelector('.table-container:nth-of-type(2) > table') !== null);
+        
+        // Try alternative selectors
+        const whaleTable2 = whalePerformanceSection ? whalePerformanceSection.parentElement.querySelector('table') : null;
+        console.log('Alternative selector (parent element) works:', whaleTable2 !== null);
+        
+        if (whaleTable2) {
+            const headers = whaleTable2.querySelectorAll('thead th');
+            console.log('Found whale table headers:', Array.from(headers).map(h => h.textContent.trim()));
+        }
         
         // Monitor for any DOM mutations
         const observer = new MutationObserver(function(mutations) {
@@ -402,7 +432,7 @@ DASHBOARD_TEMPLATE = """
         setInterval(function() {
             const tables = document.querySelectorAll('table');
             const mainWhaleTable = document.querySelector('.table-container:nth-of-type(2) > table');
-            const tokenTables = document.querySelectorAll('.token-table');
+            const tokenTables = document.querySelectorAll('.token-table-div');
             console.log(`Total tables: ${tables.length}, Token tables: ${tokenTables.length}, Main whale table exists: ${mainWhaleTable !== null}`);
             if (mainWhaleTable) {
                 const headers = mainWhaleTable.querySelectorAll('thead th');
