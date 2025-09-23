@@ -740,22 +740,22 @@ class WhaleTracker:
                 logger.warning(f"Rate limited for Moralis API call for {whale_address}")
                 return
             
-            # Try the new profitability endpoint first
-            profitability_url = f"https://deep-index.moralis.io/api/v2.2/wallets/{whale_address}/profitability"
+            # Try the new profitability endpoint first - this gives us actual realized PnL per token!
+            profitability_url = f"https://deep-index.moralis.io/api/v2.2/wallets/{whale_address}/profitability/breakdown"
             
             headers = {
                 "X-API-Key": self.moralis_api_key,
                 "Content-Type": "application/json"
             }
             
-            # Try profitability endpoint first
+            # Try profitability breakdown endpoint first
             params = {"chain": "eth"}
-            logger.info(f"Calling Moralis profitability API for {whale_address}")
+            logger.info(f"Calling Moralis profitability breakdown API for {whale_address}")
             response = requests.get(profitability_url, headers=headers, params=params, timeout=30)
             
             if response.status_code == 200:
                 # Process profitability data
-                if self._process_profitability_data(whale_address, response.json()):
+                if self._process_profitability_breakdown(whale_address, response.json()):
                     return
                 else:
                     logger.warning(f"Could not process profitability data for {whale_address}, falling back to transfers")
@@ -920,52 +920,42 @@ class WhaleTracker:
             logger.error(f"Error fetching token data from Moralis for {whale_address}: {e}")
             return
     
-    def _process_profitability_data(self, whale_address: str, data) -> bool:
-        """Process the profitability API response"""
+    def _process_profitability_breakdown(self, whale_address: str, data) -> bool:
+        """Process the profitability breakdown API response"""
         try:
-            logger.info(f"Profitability API response structure: {list(data.keys()) if isinstance(data, dict) else type(data)}")
-            logger.debug(f"Sample profitability data: {data}")
+            logger.info(f"Profitability breakdown response: {len(data.get('result', []))} tokens")
             
-            # We need to discover the structure first
-            # Common structures might be:
-            # - data["tokens"] or data["result"]["tokens"] 
-            # - direct list of token profitability
-            # - nested structure with token addresses/symbols
-            
-            tokens_data = None
-            if isinstance(data, dict):
-                # Try common field names
-                for field in ["tokens", "result", "data", "profitability", "portfolio", "holdings"]:
-                    if field in data:
-                        tokens_data = data[field]
-                        break
-                
-                # If it's a direct dict with token info (token addresses as keys)
-                if tokens_data is None and any(key for key in data.keys() if len(key) == 42 and key.startswith('0x')):
-                    tokens_data = data
-                    
-                # If it has direct token symbol keys
-                if tokens_data is None and any(key for key in data.keys() if key.isupper() and len(key) <= 10):
-                    tokens_data = data
-            elif isinstance(data, list):
-                tokens_data = data
-            
-            if not tokens_data:
-                logger.warning("Could not find token data in profitability response")
+            # The breakdown endpoint returns: {"result": [array of token objects]}
+            tokens = data.get("result", [])
+            if not tokens:
+                logger.warning("No tokens found in profitability breakdown response")
                 return False
             
             meaningful_tokens = 0
             
-            if isinstance(tokens_data, dict):
-                # Process as dict of token address/symbol -> data
-                for token_key, token_info in tokens_data.items():
-                    if self._store_profitability_token(whale_address, token_key, token_info):
+            for token_data in tokens:
+                try:
+                    # Extract data from the breakdown response
+                    token_symbol = token_data.get("symbol", "UNKNOWN")
+                    token_address = token_data.get("token_address", "")
+                    realized_profit_usd = float(token_data.get("realized_profit_usd", 0))
+                    trade_count = int(token_data.get("count_of_trades", 0))
+                    
+                    # Convert USD to ETH (rough approximation - could be improved with price feeds)
+                    # Using ~$2000/ETH as rough conversion
+                    realized_profit_eth = realized_profit_usd / 2000.0
+                    
+                    # Store if meaningful activity (realized profit or multiple trades)
+                    if abs(realized_profit_eth) > 0.001 or trade_count >= 2:  # $2+ profit or 2+ trades
+                        self.db.update_whale_token_pnl(whale_address, token_symbol, realized_profit_eth, token_address)
                         meaningful_tokens += 1
-            elif isinstance(tokens_data, list):
-                # Process as list of token objects
-                for token_info in tokens_data:
-                    if self._store_profitability_token(whale_address, None, token_info):
-                        meaningful_tokens += 1
+                        logger.debug(f"Stored {token_symbol}: ${realized_profit_usd:.2f} ({realized_profit_eth:.6f} ETH), {trade_count} trades")
+                    else:
+                        logger.debug(f"Skipped {token_symbol}: too small profit (${realized_profit_usd:.2f})")
+                        
+                except Exception as e:
+                    logger.error(f"Error processing token data: {e}")
+                    continue
             
             if meaningful_tokens == 0:
                 # Add a marker to indicate this whale has been processed (no meaningful tokens)
@@ -977,7 +967,7 @@ class WhaleTracker:
             return True
             
         except Exception as e:
-            logger.error(f"Error processing profitability data: {e}")
+            logger.error(f"Error processing profitability breakdown: {e}")
             return False
     
     def _store_profitability_token(self, whale_address: str, token_key: str, token_info) -> bool:
