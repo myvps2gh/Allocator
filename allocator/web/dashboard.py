@@ -368,6 +368,45 @@ DASHBOARD_TEMPLATE = """
     </div>
 
     <script>
+        // Debug: Track any DOM changes
+        console.log('Page loaded at:', new Date().toISOString());
+        console.log('Initial table count:', document.querySelectorAll('table').length);
+        console.log('Initial whale performance table exists:', document.querySelector('.table-container:nth-of-type(2)') !== null);
+        
+        // Monitor for any DOM mutations
+        const observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                console.log('DOM mutation detected:', mutation.type, mutation.target);
+                if (mutation.type === 'childList') {
+                    console.log('Nodes added:', mutation.addedNodes.length);
+                    console.log('Nodes removed:', mutation.removedNodes.length);
+                }
+            });
+        });
+        
+        // Start observing
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeOldValue: true
+        });
+        
+        // Check for any auto-refresh mechanisms we missed
+        console.log('setInterval count:', setInterval.length || 'undefined');
+        console.log('setTimeout count:', setTimeout.length || 'undefined');
+        
+        // Log table structure every 2 seconds
+        setInterval(function() {
+            const tables = document.querySelectorAll('table');
+            const whaleTable = document.querySelector('.table-container:nth-of-type(2) table');
+            console.log(`Tables: ${tables.length}, Whale table exists: ${whaleTable !== null}`);
+            if (whaleTable) {
+                const headers = whaleTable.querySelectorAll('thead th');
+                console.log(`Whale table headers: ${headers.length}`, Array.from(headers).map(h => h.textContent));
+            }
+        }, 2000);
+        
         // Auto-refresh completely removed to prevent table conflicts
         
         // Toggle token breakdown display
