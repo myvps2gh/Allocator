@@ -3,7 +3,7 @@ Web dashboard for Allocator AI
 """
 
 import logging
-from flask import Flask, render_template_string, jsonify
+from flask import Flask, render_template_string, jsonify, request
 from typing import Dict, Any, List
 from decimal import Decimal
 
@@ -400,6 +400,9 @@ def create_app(whale_tracker, risk_manager, db_manager, mode: str = "LIVE") -> F
     @app.route("/")
     def index():
         """Main dashboard page"""
+        print(f"Dashboard index() called - User-Agent: {request.headers.get('User-Agent', 'Unknown')}")
+        print(f"Request referrer: {request.referrer}")
+        print(f"Request args: {request.args}")
         try:
             # Get whale data from database
             whale_data = []
@@ -531,6 +534,8 @@ def create_app(whale_tracker, risk_manager, db_manager, mode: str = "LIVE") -> F
     @app.route("/api/whales")
     def api_whales():
         """API endpoint for whale data"""
+        print(f"API /api/whales called - User-Agent: {request.headers.get('User-Agent', 'Unknown')}")
+        print(f"API Request referrer: {request.referrer}")
         try:
             whale_data = []
             db_whales = db_manager.get_all_whales()
