@@ -433,9 +433,16 @@ def create_app(whale_tracker, risk_manager, db_manager, mode: str = "LIVE") -> F
     @app.route("/")
     def index():
         """Main dashboard page"""
-        print(f"Dashboard index() called - User-Agent: {request.headers.get('User-Agent', 'Unknown')}")
-        print(f"Request referrer: {request.referrer}")
-        print(f"Request args: {request.args}")
+        import time
+        request_time = time.time()
+        print(f"=== DASHBOARD REQUEST [{request_time}] ===")
+        print(f"Method: {request.method}")
+        print(f"URL: {request.url}")
+        print(f"User-Agent: {request.headers.get('User-Agent', 'Unknown')}")
+        print(f"Referrer: {request.referrer}")
+        print(f"Args: {request.args}")
+        print(f"Headers: {dict(request.headers)}")
+        print(f"=== END REQUEST [{request_time}] ===")
         try:
             # Get whale data from database
             whale_data = []
@@ -656,5 +663,17 @@ def create_app(whale_tracker, risk_manager, db_manager, mode: str = "LIVE") -> F
             "mode": mode,
             "whales_tracked": len(whale_tracker.get_all_tracked_whales())
         })
+    
+    @app.route("/favicon.ico")
+    def favicon():
+        """Favicon handler to prevent 404s"""
+        print("Favicon request intercepted")
+        return "", 204
+    
+    # Add catch-all route for debugging  
+    @app.route("/<path:path>")
+    def catch_all(path):
+        print(f"Unexpected route requested: {path}")
+        return f"Path {path} not found", 404
     
     return app
