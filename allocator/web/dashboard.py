@@ -371,7 +371,9 @@ DASHBOARD_TEMPLATE = """
         // Debug: Track any DOM changes
         console.log('Page loaded at:', new Date().toISOString());
         console.log('Initial table count:', document.querySelectorAll('table').length);
-        console.log('Initial whale performance table exists:', document.querySelector('.table-container:nth-of-type(2)') !== null);
+        const whalePerformanceSection = Array.from(document.querySelectorAll('h2')).find(h => h.textContent.includes('Whale Performance'));
+        console.log('Whale Performance section exists:', whalePerformanceSection !== undefined);
+        console.log('Main whale table exists:', document.querySelector('.table-container:nth-of-type(2) > table') !== null);
         
         // Monitor for any DOM mutations
         const observer = new MutationObserver(function(mutations) {
@@ -399,11 +401,12 @@ DASHBOARD_TEMPLATE = """
         // Log table structure every 2 seconds
         setInterval(function() {
             const tables = document.querySelectorAll('table');
-            const whaleTable = document.querySelector('.table-container:nth-of-type(2) table');
-            console.log(`Tables: ${tables.length}, Whale table exists: ${whaleTable !== null}`);
-            if (whaleTable) {
-                const headers = whaleTable.querySelectorAll('thead th');
-                console.log(`Whale table headers: ${headers.length}`, Array.from(headers).map(h => h.textContent));
+            const mainWhaleTable = document.querySelector('.table-container:nth-of-type(2) > table');
+            const tokenTables = document.querySelectorAll('.token-table');
+            console.log(`Total tables: ${tables.length}, Token tables: ${tokenTables.length}, Main whale table exists: ${mainWhaleTable !== null}`);
+            if (mainWhaleTable) {
+                const headers = mainWhaleTable.querySelectorAll('thead th');
+                console.log(`Main whale table headers: ${headers.length}`, Array.from(headers).map(h => h.textContent));
             }
         }, 2000);
         
