@@ -636,9 +636,14 @@ class WhaleTracker:
             # Skip the PROCESSED marker token
             if token_symbol == "PROCESSED":
                 continue
-            if cumulative_pnl > 0:  # Only count profitable tokens for concentration calc
-                pnl_by_token[token_symbol] = cumulative_pnl
-                total_pnl += cumulative_pnl
+            try:
+                pnl_value = float(cumulative_pnl) if cumulative_pnl is not None else 0.0
+                if pnl_value > 0:  # Only count profitable tokens for concentration calc
+                    pnl_by_token[token_symbol] = pnl_value
+                    total_pnl += pnl_value
+            except (ValueError, TypeError):
+                # Skip tokens with invalid PnL data
+                continue
         
         if total_pnl <= 0 or len(pnl_by_token) == 0:
             return 0.1  # No profitable tokens = max penalty
@@ -674,11 +679,26 @@ class WhaleTracker:
         if not whale_data:
             return 0.0
         
-        # Extract metrics
-        roi_pct = float(whale_data[1]) if whale_data[1] is not None else 0  # moralis_roi_pct
-        win_rate = float(whale_stats.win_rate) if whale_stats.win_rate else 0
-        trades = int(whale_stats.trades) if whale_stats.trades else 0
-        cumulative_pnl = float(whale_stats.roi) if whale_stats.roi else 0
+        # Extract metrics with safe conversion
+        try:
+            roi_pct = float(whale_data[1]) if whale_data[1] is not None and whale_data[1] != '' else 0.0
+        except (ValueError, TypeError):
+            roi_pct = 0.0
+            
+        try:
+            win_rate = float(whale_stats.win_rate) if whale_stats.win_rate is not None and whale_stats.win_rate != '' else 0.0
+        except (ValueError, TypeError):
+            win_rate = 0.0
+            
+        try:
+            trades = int(whale_stats.trades) if whale_stats.trades is not None and whale_stats.trades != '' else 0
+        except (ValueError, TypeError):
+            trades = 0
+            
+        try:
+            cumulative_pnl = float(whale_stats.roi) if whale_stats.roi is not None and whale_stats.roi != '' else 0.0
+        except (ValueError, TypeError):
+            cumulative_pnl = 0.0
         
         # Calculate base score using the new formula
         base_score = (

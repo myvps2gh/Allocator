@@ -560,15 +560,34 @@ def create_app(whale_tracker, risk_manager, db_manager, mode: str = "LIVE") -> F
                         except (ValueError, TypeError):
                             return default
                     
+                    # Get token breakdown for this whale
+                    token_breakdown = db_manager.get_whale_token_breakdown(whale_row[0])
+                    tokens_data = []
+                    for token_symbol, token_address, token_pnl, trade_count, last_updated in token_breakdown:
+                        # Skip the PROCESSED marker token
+                        if token_symbol == "PROCESSED":
+                            continue
+                        tokens_data.append({
+                            "symbol": token_symbol,
+                            "address": token_address,
+                            "pnl": safe_float(token_pnl),
+                            "trades": safe_int(trade_count)
+                        })
+                    
                     whale_data.append({
                         "address": whale_row[0] if whale_row[0] is not None else "unknown",  # address
                         "pnl": safe_float(whale_row[4]),  # cumulative_pnl
-                        "risk_multiplier": safe_float(whale_row[5], 1.0),  # risk_multiplier
+                        "risk": safe_float(whale_row[5], 1.0),  # risk_multiplier
+                        "allocation": safe_float(whale_row[6]),  # allocation_size
+                        "count": safe_int(whale_row[3]),  # trades
                         "score": safe_float(whale_row[7]),  # score
-                        "win_rate": safe_float(whale_row[8]),  # win_rate
-                        "trades": safe_int(whale_row[3]),  # trades
+                        "winrate": safe_float(whale_row[8]) * 100,  # win_rate (convert to percentage)
+                        "moralis_roi": safe_float(whale_row[1]) if whale_row[1] is not None else None,  # moralis_roi_pct
+                        "moralis_profit_usd": safe_float(whale_row[2]) if whale_row[2] is not None else None,  # roi_usd
+                        "moralis_trades": safe_int(whale_row[3]) if whale_row[3] is not None else None,  # trades (same as count)
                         "bootstrap_time": whale_row[9] if whale_row[9] is not None else None,  # bootstrap_time
-                        "last_refresh": whale_row[10] if whale_row[10] is not None else None  # last_refresh
+                        "last_refresh": whale_row[10] if whale_row[10] is not None else None,  # last_refresh
+                        "tokens": tokens_data  # Token breakdown
                     })
                 except Exception as e:
                     logger.warning(f"Error processing whale row in API {whale_row}: {e}")
