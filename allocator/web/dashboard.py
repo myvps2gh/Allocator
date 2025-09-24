@@ -88,25 +88,7 @@ DASHBOARD_TEMPLATE = """
             overflow: hidden;
             margin-bottom: 30px;
         }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        th {
-            background: #f8f9fa;
-            padding: 15px;
-            text-align: left;
-            font-weight: 600;
-            color: #495057;
-            border-bottom: 2px solid #dee2e6;
-        }
-        td {
-            padding: 15px;
-            border-bottom: 1px solid #dee2e6;
-        }
-        tr:hover {
-            background-color: #f8f9fa;
-        }
+        /* Global table styles removed to prevent conflicts with inline styles */
         .whale-row-profitable { background-color: rgba(40,167,69,0.05); }
         .whale-row-medium { background-color: rgba(255,193,7,0.05); }
         .whale-row-risky { background-color: rgba(220,53,69,0.05); }
@@ -224,35 +206,35 @@ DASHBOARD_TEMPLATE = """
 
     <div class="table-container">
         <h2 style="margin: 0; padding: 20px; background: #f8f9fa; border-bottom: 1px solid #dee2e6;">Discovery Status</h2>
-        <table>
+        <table style="width: 100%; border-collapse: collapse;">
             <thead>
                 <tr>
-                    <th>Mode</th>
-                    <th>Status</th>
-                    <th>Blocks to Scan</th>
-                    <th>Min Trades</th>
-                    <th>Min PnL Threshold</th>
-                    <th>Candidates Found</th>
-                    <th>Validated Whales</th>
-                    <th>Last Run Time</th>
+                    <th style="background: #f8f9fa; padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6;">Mode</th>
+                    <th style="background: #f8f9fa; padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6;">Status</th>
+                    <th style="background: #f8f9fa; padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6;">Blocks to Scan</th>
+                    <th style="background: #f8f9fa; padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6;">Min Trades</th>
+                    <th style="background: #f8f9fa; padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6;">Min PnL Threshold</th>
+                    <th style="background: #f8f9fa; padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6;">Candidates Found</th>
+                    <th style="background: #f8f9fa; padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6;">Validated Whales</th>
+                    <th style="background: #f8f9fa; padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6;">Last Run Time</th>
                 </tr>
             </thead>
             <tbody>
                 {% for discovery in discovery_status %}
                 <tr>
-                    <td><strong>{{ discovery.mode }}</strong></td>
-                    <td>
+                    <td style="padding: 15px; border-bottom: 1px solid #dee2e6;"><strong>{{ discovery.mode }}</strong></td>
+                    <td style="padding: 15px; border-bottom: 1px solid #dee2e6;">
                         <span class="status-indicator {{ 'status-online' if discovery.status == 'running' else 'status-idle' if discovery.status == 'completed' else 'status-offline' }}"></span>
                         {{ discovery.status.title() }}
                     </td>
-                    <td>{{ '{:,}'.format(discovery.blocks_back) }}</td>
-                    <td>{{ discovery.min_trades }}</td>
-                    <td>{{ discovery.min_pnl_threshold }} ETH</td>
-                    <td class="neutral">{{ discovery.candidates_found if discovery.candidates_found is not none else 'N/A' }}</td>
-                    <td class="{{ 'positive' if discovery.validated_whales and discovery.validated_whales > 0 else 'neutral' }}">
+                    <td style="padding: 15px; border-bottom: 1px solid #dee2e6;">{{ '{:,}'.format(discovery.blocks_back) }}</td>
+                    <td style="padding: 15px; border-bottom: 1px solid #dee2e6;">{{ discovery.min_trades }}</td>
+                    <td style="padding: 15px; border-bottom: 1px solid #dee2e6;">{{ discovery.min_pnl_threshold }} ETH</td>
+                    <td style="padding: 15px; border-bottom: 1px solid #dee2e6;" class="neutral">{{ discovery.candidates_found if discovery.candidates_found is not none else 'N/A' }}</td>
+                    <td style="padding: 15px; border-bottom: 1px solid #dee2e6;" class="{{ 'positive' if discovery.validated_whales and discovery.validated_whales > 0 else 'neutral' }}">
                         {{ discovery.validated_whales if discovery.validated_whales is not none else 'N/A' }}
                     </td>
-                    <td>{{ discovery.last_run_duration if discovery.last_run_duration else 'N/A' }}</td>
+                    <td style="padding: 15px; border-bottom: 1px solid #dee2e6;">{{ discovery.last_run_duration if discovery.last_run_duration else 'N/A' }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -362,30 +344,30 @@ DASHBOARD_TEMPLATE = """
 
     <div class="table-container">
         <h2 style="margin: 0; padding: 20px; background: #f8f9fa; border-bottom: 1px solid #dee2e6;">Recent Trades</h2>
-        <table>
+        <table style="width: 100%; border-collapse: collapse;">
             <thead>
                 <tr>
-                    <th>Time</th>
-                    <th>Actor</th>
-                    <th>Direction</th>
-                    <th>Amount In</th>
-                    <th>Amount Out</th>
-                    <th>PnL</th>
-                    <th>Mode</th>
+                    <th style="background: #f8f9fa; padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6;">Time</th>
+                    <th style="background: #f8f9fa; padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6;">Actor</th>
+                    <th style="background: #f8f9fa; padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6;">Direction</th>
+                    <th style="background: #f8f9fa; padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6;">Amount In</th>
+                    <th style="background: #f8f9fa; padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6;">Amount Out</th>
+                    <th style="background: #f8f9fa; padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6;">PnL</th>
+                    <th style="background: #f8f9fa; padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6;">Mode</th>
                 </tr>
             </thead>
             <tbody>
                 {% for t in trades %}
                 <tr>
-                    <td>{{ t.timestamp }}</td>
-                    <td>{{ t.actor }}</td>
-                    <td>{{ t.token_in }} → {{ t.token_out }}</td>
-                    <td>{{ '%.4f' | format(t.amount_in) }}</td>
-                    <td>{{ '%.4f' | format(t.amount_out) }}</td>
-                    <td class="{{ 'positive' if t.pnl > 0 else 'negative' if t.pnl < 0 else 'neutral' }}">
+                    <td style="padding: 15px; border-bottom: 1px solid #dee2e6;">{{ t.timestamp }}</td>
+                    <td style="padding: 15px; border-bottom: 1px solid #dee2e6;">{{ t.actor }}</td>
+                    <td style="padding: 15px; border-bottom: 1px solid #dee2e6;">{{ t.token_in }} → {{ t.token_out }}</td>
+                    <td style="padding: 15px; border-bottom: 1px solid #dee2e6;">{{ '%.4f' | format(t.amount_in) }}</td>
+                    <td style="padding: 15px; border-bottom: 1px solid #dee2e6;">{{ '%.4f' | format(t.amount_out) }}</td>
+                    <td style="padding: 15px; border-bottom: 1px solid #dee2e6;" class="{{ 'positive' if t.pnl > 0 else 'negative' if t.pnl < 0 else 'neutral' }}">
                         {{ '%.4f' | format(t.pnl) }}
                     </td>
-                    <td>{{ t.mode }}</td>
+                    <td style="padding: 15px; border-bottom: 1px solid #dee2e6;">{{ t.mode }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
