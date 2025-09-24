@@ -261,53 +261,103 @@ DASHBOARD_TEMPLATE = """
 
     <div class="table-container">
         <h2 style="margin: 0; padding: 20px; background: #f8f9fa; border-bottom: 1px solid #dee2e6;">Whale Performance</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>Whale Address</th>
-                    <th>Cumulative PnL</th>
-                    <th>Risk Multiplier</th>
-                    <th>Allocation Size</th>
-                    <th>Trade Count</th>
-                    <th>Score v2.0</th>
-                    <th>Win Rate</th>
-                    <th>Moralis ROI%</th>
-                    <th>Moralis PnL $</th>
-                    <th>Tokens</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for w in whales %}
-                <tr class="
-                    {% if w.moralis_roi is not none and w.moralis_roi >= 20 %}
-                        whale-row-profitable
-                    {% elif w.moralis_roi is not none and w.moralis_roi > 0 %}
-                        whale-row-medium
-                    {% else %}
-                        whale-row-risky
-                    {% endif %}
-                ">
-                    <td>
-                        <span class="status-indicator status-online"></span>
-                        {{ w.address[:6] }}...{{ w.address[-4:] }}
-                    </td>
-                    <td class="{{ 'positive' if w.pnl > 0 else 'negative' if w.pnl < 0 else 'neutral' }}">
-                        {{ '%.4f' | format(w.pnl) }}
-                    </td>
-                    <td>{{ '%.2f' | format(w.risk) }}x</td>
-                    <td>{{ '%.4f' | format(w.allocation) }} ETH</td>
-                    <td>{{ w.count }}</td>
-                    <td><strong>{{ '%.2f' | format(w.score) }}</strong></td>
-                    <td>{{ '%.0f' | format(w.winrate) }}%</td>
-                    <td>{% if w.moralis_roi is not none %}{{ '%.2f' | format(w.moralis_roi) }}%{% else %}N/A{% endif %}</td>
-                    <td>{% if w.moralis_profit_usd is not none %}{{ '%.2f' | format(w.moralis_profit_usd) }}${% else %}N/A{% endif %}</td>
-                    <td style="background-color: yellow;">{{ w.tokens|length }} tokens</td>
-                    <td style="background-color: lightblue;">Token data available</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        <div style="overflow-x: auto;">
+            <table style="width: 100%; min-width: 1200px; border-collapse: collapse;">
+                <thead>
+                    <tr style="background: #f8f9fa;">
+                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Whale Address</th>
+                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Cumulative PnL</th>
+                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Risk Multiplier</th>
+                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Allocation Size</th>
+                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Trade Count</th>
+                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Score v2.0</th>
+                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Win Rate</th>
+                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Moralis ROI%</th>
+                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Moralis PnL $</th>
+                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Tokens</th>
+                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for w in whales %}
+                    <tr style="border-bottom: 1px solid #dee2e6; {% if w.moralis_roi is not none and w.moralis_roi >= 20 %}background-color: rgba(40,167,69,0.05);{% elif w.moralis_roi is not none and w.moralis_roi > 0 %}background-color: rgba(255,193,7,0.05);{% else %}background-color: rgba(220,53,69,0.05);{% endif %}">
+                        <td style="padding: 15px; border-bottom: 1px solid #dee2e6;">
+                            <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background-color: #28a745; margin-right: 8px;"></span>
+                            {{ w.address[:6] }}...{{ w.address[-4:] }}
+                        </td>
+                        <td style="padding: 15px; border-bottom: 1px solid #dee2e6; {% if w.pnl > 0 %}color: #28a745;{% elif w.pnl < 0 %}color: #dc3545;{% else %}color: #007bff;{% endif %}">
+                            {{ '%.4f' | format(w.pnl) }}
+                        </td>
+                        <td style="padding: 15px; border-bottom: 1px solid #dee2e6;">
+                            {{ '%.2f' | format(w.risk) }}x
+                        </td>
+                        <td style="padding: 15px; border-bottom: 1px solid #dee2e6;">
+                            {{ '%.4f' | format(w.allocation) }} ETH
+                        </td>
+                        <td style="padding: 15px; border-bottom: 1px solid #dee2e6;">
+                            {{ w.count }}
+                        </td>
+                        <td style="padding: 15px; border-bottom: 1px solid #dee2e6; font-weight: bold;">
+                            {{ '%.2f' | format(w.score) }}
+                        </td>
+                        <td style="padding: 15px; border-bottom: 1px solid #dee2e6;">
+                            {{ '%.0f' | format(w.winrate) }}%
+                        </td>
+                        <td style="padding: 15px; border-bottom: 1px solid #dee2e6;">
+                            {% if w.moralis_roi is not none %}{{ '%.2f' | format(w.moralis_roi) }}%{% else %}N/A{% endif %}
+                        </td>
+                        <td style="padding: 15px; border-bottom: 1px solid #dee2e6;">
+                            {% if w.moralis_profit_usd is not none %}{{ '%.2f' | format(w.moralis_profit_usd) }}${% else %}N/A{% endif %}
+                        </td>
+                        <td style="padding: 15px; border-bottom: 1px solid #dee2e6;">
+                            {{ w.tokens|length }} tokens
+                        </td>
+                        <td style="padding: 15px; border-bottom: 1px solid #dee2e6;">
+                            <button style="background: #28a745; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; font-size: 12px;" onclick="toggleTokens('{{ w.address }}')">Show Tokens</button>
+                        </td>
+                    </tr>
+                    <!-- Token breakdown row (hidden by default) -->
+                    <tr id="tokens-{{ w.address }}" style="display: none; background-color: #f8f9fa;">
+                        <td colspan="11" style="padding: 20px; border-bottom: 1px solid #dee2e6;">
+                            <h4 style="margin: 0 0 15px 0; color: #495057;">Token Breakdown for {{ w.address[:6] }}...{{ w.address[-4:] }}</h4>
+                            {% if w.tokens %}
+                            <table style="width: 100%; border-collapse: collapse; background: white; border: 1px solid #dee2e6; border-radius: 4px;">
+                                <thead>
+                                    <tr style="background: #e9ecef;">
+                                        <th style="padding: 10px; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600;">Token</th>
+                                        <th style="padding: 10px; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600;">PnL (ETH)</th>
+                                        <th style="padding: 10px; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600;">Trades</th>
+                                        <th style="padding: 10px; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600;">Weight</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for token in w.tokens %}
+                                    <tr>
+                                        <td style="padding: 10px; border-bottom: 1px solid #dee2e6;"><strong>{{ token.symbol }}</strong></td>
+                                        <td style="padding: 10px; border-bottom: 1px solid #dee2e6; {% if token.pnl > 0 %}color: #28a745;{% elif token.pnl < 0 %}color: #dc3545;{% else %}color: #007bff;{% endif %}">
+                                            {{ '%.4f' | format(token.pnl) }}
+                                        </td>
+                                        <td style="padding: 10px; border-bottom: 1px solid #dee2e6;">{{ token.trades }}</td>
+                                        <td style="padding: 10px; border-bottom: 1px solid #dee2e6;">
+                                            {% if w.pnl > 0 %}
+                                                {{ '%.1f' | format((token.pnl / w.pnl) * 100) }}%
+                                            {% else %}
+                                                N/A
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                            {% else %}
+                            <p style="color: #6c757d; font-style: italic;">No token-level data available yet.</p>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
 
     <div class="table-container">
