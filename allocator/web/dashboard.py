@@ -566,8 +566,14 @@ def create_app(whale_tracker, risk_manager, db_manager, mode: str = "LIVE") -> F
     @app.route("/api/whales")
     def api_whales():
         """API endpoint for whale data"""
-        print(f"API /api/whales called - User-Agent: {request.headers.get('User-Agent', 'Unknown')}")
-        print(f"API Request referrer: {request.referrer}")
+        print(f"=== API /api/whales CALLED ===")
+        print(f"Time: {time.time()}")
+        print(f"User-Agent: {request.headers.get('User-Agent', 'Unknown')}")
+        print(f"Referrer: {request.referrer}")
+        print(f"Request method: {request.method}")
+        print(f"Request URL: {request.url}")
+        print(f"Request args: {request.args}")
+        print(f"=== END API CALL ===")
         try:
             whale_data = []
             db_whales = db_manager.get_all_whales()
