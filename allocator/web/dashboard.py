@@ -302,8 +302,8 @@ DASHBOARD_TEMPLATE = """
                     <td>{{ '%.0f' | format(w.winrate) }}%</td>
                     <td>{% if w.moralis_roi is not none %}{{ '%.2f' | format(w.moralis_roi) }}%{% else %}N/A{% endif %}</td>
                     <td>{% if w.moralis_profit_usd is not none %}{{ '%.2f' | format(w.moralis_profit_usd) }}${% else %}N/A{% endif %}</td>
-                    <td>{{ w.tokens|length }} tokens</td>
-                    <td>Token data available</td>
+                    <td style="background-color: yellow;">{{ w.tokens|length }} tokens</td>
+                    <td style="background-color: lightblue;">Token data available</td>
                 </tr>
                 {% endfor %}
             </tbody>
