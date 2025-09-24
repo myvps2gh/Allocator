@@ -703,7 +703,9 @@ class WhaleTracker:
                 logger.warning(f"No whale data found for {whale_address}")
                 return 0.0
             
-            logger.debug(f"Processing whale {whale_address}: whale_data={whale_data}, whale_stats={whale_stats}")
+            logger.debug(f"Processing whale {whale_address}: whale_data={whale_data}")
+            logger.debug(f"Whale stats for {whale_address}: score={whale_stats.score}, roi={whale_stats.roi}, trades={whale_stats.trades}, win_rate={whale_stats.win_rate}")
+            logger.debug(f"Whale stats types: score={type(whale_stats.score)}, roi={type(whale_stats.roi)}, trades={type(whale_stats.trades)}, win_rate={type(whale_stats.win_rate)}")
             
         except Exception as e:
             logger.error(f"Error getting whale data for {whale_address}: {e}")
@@ -724,12 +726,14 @@ class WhaleTracker:
         try:
             if whale_stats.win_rate is None or whale_stats.win_rate == '':
                 win_rate = 0.0
+            elif isinstance(whale_stats.win_rate, Decimal):
+                win_rate = float(whale_stats.win_rate)
             elif isinstance(whale_stats.win_rate, (int, float)):
                 win_rate = float(whale_stats.win_rate)
             else:
                 win_rate = float(str(whale_stats.win_rate))
-        except (ValueError, TypeError, decimal.ConversionSyntax):
-            logger.warning(f"Invalid win_rate data for {whale_address}: {whale_stats.win_rate}")
+        except (ValueError, TypeError, decimal.ConversionSyntax, decimal.InvalidOperation) as e:
+            logger.warning(f"Invalid win_rate data for {whale_address}: {whale_stats.win_rate} (type: {type(whale_stats.win_rate)}, error: {e})")
             win_rate = 0.0
             
         try:
@@ -737,21 +741,25 @@ class WhaleTracker:
                 trades = 0
             elif isinstance(whale_stats.trades, (int, float)):
                 trades = int(whale_stats.trades)
+            elif isinstance(whale_stats.trades, Decimal):
+                trades = int(whale_stats.trades)
             else:
                 trades = int(float(str(whale_stats.trades)))
-        except (ValueError, TypeError, decimal.ConversionSyntax):
-            logger.warning(f"Invalid trades data for {whale_address}: {whale_stats.trades}")
+        except (ValueError, TypeError, decimal.ConversionSyntax, decimal.InvalidOperation) as e:
+            logger.warning(f"Invalid trades data for {whale_address}: {whale_stats.trades} (type: {type(whale_stats.trades)}, error: {e})")
             trades = 0
             
         try:
             if whale_stats.roi is None or whale_stats.roi == '':
                 cumulative_pnl = 0.0
+            elif isinstance(whale_stats.roi, Decimal):
+                cumulative_pnl = float(whale_stats.roi)
             elif isinstance(whale_stats.roi, (int, float)):
                 cumulative_pnl = float(whale_stats.roi)
             else:
                 cumulative_pnl = float(str(whale_stats.roi))
-        except (ValueError, TypeError, decimal.ConversionSyntax):
-            logger.warning(f"Invalid ROI data for {whale_address}: {whale_stats.roi}")
+        except (ValueError, TypeError, decimal.ConversionSyntax, decimal.InvalidOperation) as e:
+            logger.warning(f"Invalid ROI data for {whale_address}: {whale_stats.roi} (type: {type(whale_stats.roi)}, error: {e})")
             cumulative_pnl = 0.0
         
         # Calculate base score using the new formula
