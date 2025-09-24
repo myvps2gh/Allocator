@@ -303,43 +303,7 @@ DASHBOARD_TEMPLATE = """
                     <td>{% if w.moralis_roi is not none %}{{ '%.2f' | format(w.moralis_roi) }}%{% else %}N/A{% endif %}</td>
                     <td>{% if w.moralis_profit_usd is not none %}{{ '%.2f' | format(w.moralis_profit_usd) }}${% else %}N/A{% endif %}</td>
                     <td>{{ w.tokens|length }} tokens</td>
-                    <td><button class="btn-expand" onclick="toggleTokens('{{ w.address }}')">Show Tokens</button></td>
-                </tr>
-                <!-- Token breakdown row (hidden by default) -->
-                <tr id="tokens-{{ w.address }}" class="token-breakdown" style="display: none;">
-                    <td colspan="11">
-                        <div class="token-details">
-                            <h4>Token Breakdown for {{ w.address[:6] }}...{{ w.address[-4:] }}</h4>
-                            {% if w.tokens %}
-                            <div class="token-table-div">
-                                <div class="token-header">
-                                    <span class="token-col">Token</span>
-                                    <span class="token-col">PnL (ETH)</span>
-                                    <span class="token-col">Trades</span>
-                                    <span class="token-col">Weight</span>
-                                </div>
-                                {% for token in w.tokens %}
-                                <div class="token-row">
-                                    <span class="token-col"><strong>{{ token.symbol }}</strong></span>
-                                    <span class="token-col {{ 'positive' if token.pnl > 0 else 'negative' if token.pnl < 0 else 'neutral' }}">
-                                        {{ '%.4f' | format(token.pnl) }}
-                                    </span>
-                                    <span class="token-col">{{ token.trades }}</span>
-                                    <span class="token-col">
-                                        {% if w.pnl > 0 %}
-                                            {{ '%.1f' | format((token.pnl / w.pnl) * 100) }}%
-                                        {% else %}
-                                            N/A
-                                        {% endif %}
-                                    </span>
-                                </div>
-                                {% endfor %}
-                            </div>
-                            {% else %}
-                            <p>No token-level data available yet.</p>
-                            {% endif %}
-                        </div>
-                    </td>
+                    <td>Token data available</td>
                 </tr>
                 {% endfor %}
             </tbody>
