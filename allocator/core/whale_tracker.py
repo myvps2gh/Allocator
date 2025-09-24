@@ -637,12 +637,33 @@ class WhaleTracker:
             if token_symbol == "PROCESSED":
                 continue
             try:
-                pnl_value = float(cumulative_pnl) if cumulative_pnl is not None else 0.0
+                # Handle various data types and invalid values
+                if cumulative_pnl is None or cumulative_pnl == '':
+                    pnl_value = 0.0
+                elif isinstance(cumulative_pnl, (int, float)):
+                    pnl_value = float(cumulative_pnl)
+                elif isinstance(cumulative_pnl, str):
+                    # Check for obviously invalid strings
+                    if cumulative_pnl.strip() in ['', 'None', 'null', 'NULL']:
+                        pnl_value = 0.0
+                    else:
+                        # Try to convert string to float
+                        pnl_value = float(cumulative_pnl)
+                else:
+                    logger.warning(f"Unexpected cumulative_pnl type for {token_symbol}: {type(cumulative_pnl)} = {cumulative_pnl}")
+                    pnl_value = 0.0
+                
+                # Check for reasonable bounds to prevent overflow
+                if abs(pnl_value) > 1e12:  # Cap at 1 trillion
+                    logger.warning(f"Extremely large PnL value for {token_symbol}: {pnl_value}, capping to 0")
+                    pnl_value = 0.0
+                
                 if pnl_value > 0:  # Only count profitable tokens for concentration calc
                     pnl_by_token[token_symbol] = pnl_value
                     total_pnl += pnl_value
-            except (ValueError, TypeError):
+            except (ValueError, TypeError, decimal.ConversionSyntax) as e:
                 # Skip tokens with invalid PnL data
+                logger.warning(f"Skipping token {token_symbol} due to invalid PnL data: {cumulative_pnl} (error: {e})")
                 continue
         
         if total_pnl <= 0 or len(pnl_by_token) == 0:
@@ -681,23 +702,47 @@ class WhaleTracker:
         
         # Extract metrics with safe conversion
         try:
-            roi_pct = float(whale_data[1]) if whale_data[1] is not None and whale_data[1] != '' else 0.0
-        except (ValueError, TypeError):
+            if whale_data[1] is None or whale_data[1] == '':
+                roi_pct = 0.0
+            elif isinstance(whale_data[1], (int, float)):
+                roi_pct = float(whale_data[1])
+            else:
+                roi_pct = float(str(whale_data[1]))
+        except (ValueError, TypeError, decimal.ConversionSyntax):
+            logger.warning(f"Invalid ROI data for {whale_address}: {whale_data[1]}")
             roi_pct = 0.0
             
         try:
-            win_rate = float(whale_stats.win_rate) if whale_stats.win_rate is not None and whale_stats.win_rate != '' else 0.0
-        except (ValueError, TypeError):
+            if whale_stats.win_rate is None or whale_stats.win_rate == '':
+                win_rate = 0.0
+            elif isinstance(whale_stats.win_rate, (int, float)):
+                win_rate = float(whale_stats.win_rate)
+            else:
+                win_rate = float(str(whale_stats.win_rate))
+        except (ValueError, TypeError, decimal.ConversionSyntax):
+            logger.warning(f"Invalid win_rate data for {whale_address}: {whale_stats.win_rate}")
             win_rate = 0.0
             
         try:
-            trades = int(whale_stats.trades) if whale_stats.trades is not None and whale_stats.trades != '' else 0
-        except (ValueError, TypeError):
+            if whale_stats.trades is None or whale_stats.trades == '':
+                trades = 0
+            elif isinstance(whale_stats.trades, (int, float)):
+                trades = int(whale_stats.trades)
+            else:
+                trades = int(float(str(whale_stats.trades)))
+        except (ValueError, TypeError, decimal.ConversionSyntax):
+            logger.warning(f"Invalid trades data for {whale_address}: {whale_stats.trades}")
             trades = 0
             
         try:
-            cumulative_pnl = float(whale_stats.roi) if whale_stats.roi is not None and whale_stats.roi != '' else 0.0
-        except (ValueError, TypeError):
+            if whale_stats.roi is None or whale_stats.roi == '':
+                cumulative_pnl = 0.0
+            elif isinstance(whale_stats.roi, (int, float)):
+                cumulative_pnl = float(whale_stats.roi)
+            else:
+                cumulative_pnl = float(str(whale_stats.roi))
+        except (ValueError, TypeError, decimal.ConversionSyntax):
+            logger.warning(f"Invalid ROI data for {whale_address}: {whale_stats.roi}")
             cumulative_pnl = 0.0
         
         # Calculate base score using the new formula
