@@ -254,10 +254,10 @@ DASHBOARD_TEMPLATE = """
                         <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Trade Count</th>
                         <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Score v2.0</th>
                         <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Win Rate</th>
-                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Moralis ROI%</th>
-                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Moralis PnL $</th>
-                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Tokens</th>
-                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Actions</th>
+                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; width: 100px;">Moralis ROI%</th>
+                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; width: 120px;">Moralis PnL $</th>
+                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; width: 80px;">Tokens</th>
+                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; width: 100px;">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -285,16 +285,32 @@ DASHBOARD_TEMPLATE = """
                         <td style="padding: 15px; border-bottom: 1px solid #dee2e6;">
                             {{ '%.0f' | format(w.winrate) }}%
                         </td>
-                        <td style="padding: 15px; border-bottom: 1px solid #dee2e6;">
-                            {% if w.moralis_roi is not none %}{{ '%.2f' | format(w.moralis_roi) }}%{% else %}N/A{% endif %}
+                        <td style="padding: 15px; border-bottom: 1px solid #dee2e6; width: 100px; text-align: center; overflow: hidden; text-overflow: ellipsis;">
+                            {% if w.moralis_roi is not none %}
+                                {% if w.moralis_roi > 999999 or w.moralis_roi < -999999 %}
+                                    {{ 'ERROR' }}
+                                {% else %}
+                                    {{ '%.2f' | format(w.moralis_roi) }}%
+                                {% endif %}
+                            {% else %}
+                                N/A
+                            {% endif %}
                         </td>
-                        <td style="padding: 15px; border-bottom: 1px solid #dee2e6;">
-                            {% if w.moralis_profit_usd is not none %}{{ '%.2f' | format(w.moralis_profit_usd) }}${% else %}N/A{% endif %}
+                        <td style="padding: 15px; border-bottom: 1px solid #dee2e6; width: 120px; text-align: center; overflow: hidden; text-overflow: ellipsis;">
+                            {% if w.moralis_profit_usd is not none %}
+                                {% if w.moralis_profit_usd > 999999999 or w.moralis_profit_usd < -999999999 %}
+                                    {{ 'ERROR' }}
+                                {% else %}
+                                    {{ '%.2f' | format(w.moralis_profit_usd) }}$
+                                {% endif %}
+                            {% else %}
+                                N/A
+                            {% endif %}
                         </td>
-                        <td style="padding: 15px; border-bottom: 1px solid #dee2e6;">
+                        <td style="padding: 15px; border-bottom: 1px solid #dee2e6; width: 80px; text-align: center;">
                             {{ w.tokens|length }} tokens
                         </td>
-                        <td style="padding: 15px; border-bottom: 1px solid #dee2e6;">
+                        <td style="padding: 15px; border-bottom: 1px solid #dee2e6; width: 100px; text-align: center;">
                             <button style="background: #28a745; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; font-size: 12px;" onclick="toggleTokens('{{ w.address }}')">Show Tokens</button>
                         </td>
                     </tr>
