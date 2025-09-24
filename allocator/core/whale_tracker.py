@@ -690,14 +690,23 @@ class WhaleTracker:
         """Calculate Score Formula 2.0 with diversity penalty"""
         whale_address = whale_address.lower()
         
-        # Get current whale stats
-        whale_stats = self.get_whale_stats(whale_address)
-        if not whale_stats:
-            return 0.0
-        
-        # Get whale data from database for additional metrics
-        whale_data = self.db.get_whale(whale_address)
-        if not whale_data:
+        try:
+            # Get current whale stats
+            whale_stats = self.get_whale_stats(whale_address)
+            if not whale_stats:
+                logger.warning(f"No whale stats found for {whale_address}")
+                return 0.0
+            
+            # Get whale data from database for additional metrics
+            whale_data = self.db.get_whale(whale_address)
+            if not whale_data:
+                logger.warning(f"No whale data found for {whale_address}")
+                return 0.0
+            
+            logger.debug(f"Processing whale {whale_address}: whale_data={whale_data}, whale_stats={whale_stats}")
+            
+        except Exception as e:
+            logger.error(f"Error getting whale data for {whale_address}: {e}")
             return 0.0
         
         # Extract metrics with safe conversion
@@ -754,10 +763,19 @@ class WhaleTracker:
         )
         
         # Calculate diversity factor
-        diversity_factor = self.calculate_diversity_factor(whale_address)
+        try:
+            diversity_factor = self.calculate_diversity_factor(whale_address)
+            logger.debug(f"Diversity factor calculated for {whale_address}: {diversity_factor}")
+        except Exception as e:
+            logger.error(f"Error calculating diversity factor for {whale_address}: {e}")
+            diversity_factor = 0.1  # Default to minimum diversity
         
         # Apply diversity adjustment
-        adjusted_score = base_score * (0.1 + 0.9 * diversity_factor)
+        try:
+            adjusted_score = base_score * (0.1 + 0.9 * diversity_factor)
+        except Exception as e:
+            logger.error(f"Error calculating adjusted score for {whale_address}: {e}")
+            adjusted_score = base_score
         
         logger.info(f"Whale {whale_address} Score v2.0: base={base_score:.2f}, "
                    f"diversity={diversity_factor:.3f}, adjusted={adjusted_score:.2f}")
