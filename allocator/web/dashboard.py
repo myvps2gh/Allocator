@@ -379,43 +379,6 @@ DASHBOARD_TEMPLATE = """
     </div>
 
     <script>
-        // DEBUG: What is actually happening?
-        console.log('=== DASHBOARD DEBUG START ===');
-        console.log('Page loaded at:', new Date().toISOString());
-        console.log('URL:', window.location.href);
-        console.log('User Agent:', navigator.userAgent);
-        
-        // Check DOM immediately
-        console.log('Initial DOM state:');
-        console.log('- Total tables:', document.querySelectorAll('table').length);
-        console.log('- Table containers:', document.querySelectorAll('.table-container').length);
-        
-        // List all table containers
-        document.querySelectorAll('.table-container').forEach((container, index) => {
-            const h2 = container.querySelector('h2');
-            const table = container.querySelector('table');
-            const headers = table ? Array.from(table.querySelectorAll('thead th')).map(h => h.textContent.trim()) : [];
-            console.log(`Container ${index}: "${h2?.textContent.trim()}" | Table: ${!!table} | Headers: [${headers.join(', ')}]`);
-        });
-        
-        console.log('=== DASHBOARD DEBUG END ===');
-        
-        // Monitor for CSS changes that might hide elements
-        setTimeout(function() {
-            console.log('=== 2 SECOND CHECK ===');
-            console.log('- Total tables:', document.querySelectorAll('table').length);
-            console.log('- Table containers:', document.querySelectorAll('.table-container').length);
-            
-            document.querySelectorAll('.table-container').forEach((container, index) => {
-                const h2 = container.querySelector('h2');
-                const table = container.querySelector('table');
-                const style = window.getComputedStyle(container);
-                console.log(`Container ${index}: "${h2?.textContent.trim()}" | Visible: ${style.display !== 'none' && style.visibility !== 'hidden'} | Display: ${style.display}`);
-            });
-        }, 2000);
-        
-        // ALL AUTO-REFRESH AND MONITORING DISABLED
-        
         // Toggle token breakdown display
         function toggleTokens(whaleAddress) {
             const row = document.getElementById('tokens-' + whaleAddress);
