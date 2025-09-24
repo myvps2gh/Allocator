@@ -554,15 +554,44 @@ def create_app(whale_tracker, risk_manager, db_manager, mode: str = "LIVE") -> F
                         "last_run_duration": None
                     })
             
+            # TEMPORARY: Test with minimal static data to isolate the issue
+            minimal_whale_data = [
+                {
+                    "address": "0x1234567890abcdef",
+                    "pnl": 1.5,
+                    "risk": 2.0,
+                    "allocation": 0.5,
+                    "count": 10,
+                    "score": 85.5,
+                    "winrate": 75.0,
+                    "moralis_roi": 25.5,
+                    "moralis_profit_usd": 1500.0,
+                    "tokens": []
+                }
+            ]
+            
+            minimal_discovery_status = [
+                {
+                    "mode": "test_mode",
+                    "status": "idle", 
+                    "blocks_back": 5000,
+                    "min_trades": 10,
+                    "min_pnl_threshold": "25 ETH",
+                    "candidates_found": 5,
+                    "validated_whales": 2,
+                    "last_run_duration": "N/A"
+                }
+            ]
+            
             response = make_response(render_template_string(
                 DASHBOARD_TEMPLATE,
-                whales=whale_data,
-                trades=trades_data,
-                discovery_status=discovery_status,
-                total_pnl=stats["total_pnl"],
-                capital=2000,  # This should come from config
-                whale_count=len(whale_data),
-                trade_count=stats["trade_count"],
+                whales=minimal_whale_data,  # Use minimal static data
+                trades=[],  # Empty trades
+                discovery_status=minimal_discovery_status,  # Minimal discovery
+                total_pnl=100.0,
+                capital=2000,
+                whale_count=1,
+                trade_count=0,
                 mode=mode
             ))
             
