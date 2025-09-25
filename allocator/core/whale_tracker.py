@@ -6,6 +6,7 @@ import time
 import logging
 import requests
 import math
+import decimal
 from decimal import Decimal
 from collections import defaultdict, deque
 from typing import Dict, List, Optional, Tuple
