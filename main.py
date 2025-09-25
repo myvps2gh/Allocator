@@ -227,8 +227,6 @@ class AllocatorAI:
     
     def start_discovery(self):
         """Start simple, reliable sequential whale discovery"""
-        logger.info("Discovery temporarily disabled for dashboard debugging")
-        return
         
         def run_discovery_mode_http(mode: str):
             """Run discovery mode using HTTP connection (no WebSocket conflicts)"""
