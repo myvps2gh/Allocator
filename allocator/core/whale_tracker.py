@@ -1046,7 +1046,7 @@ class WhaleTracker:
                     
                     # Store if meaningful activity (realized profit or multiple trades)
                     if abs(realized_profit_eth) > 0.001 or trade_count >= 2:  # $2+ profit or 2+ trades
-                        self.db.update_whale_token_pnl(whale_address, token_symbol, realized_profit_eth, token_address)
+                        self.db.update_whale_token_pnl(whale_address, token_symbol, realized_profit_eth, token_address, trade_count)
                         meaningful_tokens += 1
                         logger.debug(f"Stored {token_symbol}: ${realized_profit_usd:.2f} ({realized_profit_eth:.6f} ETH), {trade_count} trades")
                     else:
@@ -1119,7 +1119,7 @@ class WhaleTracker:
             
             # Store if meaningful
             if pnl is not None and (abs(pnl) > 0.0001 or trades >= 2):
-                self.db.update_whale_token_pnl(whale_address, token_symbol, pnl, token_address)
+                self.db.update_whale_token_pnl(whale_address, token_symbol, pnl, token_address, trades)
                 logger.debug(f"Stored {token_symbol}: PnL={pnl:.6f}, trades={trades}")
                 return True
                 

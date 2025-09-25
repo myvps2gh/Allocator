@@ -254,7 +254,7 @@ class DatabaseManager:
                 return False
     
     def update_whale_token_pnl(self, whale_address: str, token_symbol: str, 
-                              pnl_change: float, token_address: str = None) -> bool:
+                              pnl_change: float, token_address: str = None, trade_count: int = 1) -> bool:
         """Update token-level PnL for a whale"""
         with self.lock:
             try:
@@ -264,12 +264,11 @@ class DatabaseManager:
                     VALUES (?, ?, ?, 
                         COALESCE((SELECT cumulative_pnl FROM whale_token_pnl 
                                 WHERE whale_address=? AND token_symbol=?), 0) + ?,
-                        COALESCE((SELECT trade_count FROM whale_token_pnl 
-                                WHERE whale_address=? AND token_symbol=?), 0) + 1,
+                        ?,
                         ?)
                 """, (whale_address.lower(), token_symbol, token_address, 
                       whale_address.lower(), token_symbol, float(pnl_change),
-                      whale_address.lower(), token_symbol, int(time.time())))
+                      trade_count, int(time.time())))
                 self.conn.commit()
                 return True
             except sqlite3.Error as e:
