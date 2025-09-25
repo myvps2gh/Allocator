@@ -559,16 +559,28 @@ def main():
                         if whale_address not in allocator.whale_tracker.whale_scores:
                             from allocator.core.whale_tracker import WhaleStats
                             from decimal import Decimal
+                            import decimal
+                            
+                            # Safe conversion function for Decimal fields
+                            def safe_decimal(value, default="0"):
+                                if value is None or value == '':
+                                    return Decimal(default)
+                                try:
+                                    return Decimal(str(value))
+                                except (ValueError, decimal.InvalidOperation, decimal.ConversionSyntax):
+                                    logger.warning(f"Invalid decimal value: {value}, using default: {default}")
+                                    return Decimal(default)
+                            
                             allocator.whale_tracker.whale_scores[whale_address] = WhaleStats(
                                 address=whale_address,
-                                score=Decimal(str(whale_data[7] or 0)),  # existing score
-                                roi=Decimal(str(whale_data[4] or 0)),    # cumulative_pnl  
+                                score=safe_decimal(whale_data[7], "0"),  # existing score
+                                roi=safe_decimal(whale_data[4], "0"),    # cumulative_pnl  
                                 trades=whale_data[3] or 0,               # trades
-                                win_rate=Decimal(str(whale_data[8] or 0)), # win_rate
+                                win_rate=safe_decimal(whale_data[8], "0"), # win_rate
                                 volatility=Decimal("1"),
                                 sharpe_ratio=Decimal("0"),
-                                moralis_roi_pct=Decimal(str(whale_data[1] or 0)),
-                                moralis_profit_usd=Decimal(str(whale_data[2] or 0)),
+                                moralis_roi_pct=safe_decimal(whale_data[1], "0"),
+                                moralis_profit_usd=safe_decimal(whale_data[2], "0"),
                                 moralis_trades=whale_data[3] or 0
                             )
                     
