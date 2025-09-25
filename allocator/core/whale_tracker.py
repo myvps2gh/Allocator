@@ -704,6 +704,8 @@ class WhaleTracker:
                 return 0.0
             
             logger.debug(f"Processing whale {whale_address}: whale_data={whale_data}")
+            logger.debug(f"Whale data types: {[type(x) for x in whale_data]}")
+            logger.debug(f"Whale data values: {whale_data}")
             logger.debug(f"Whale stats for {whale_address}: score={whale_stats.score}, roi={whale_stats.roi}, trades={whale_stats.trades}, win_rate={whale_stats.win_rate}")
             logger.debug(f"Whale stats types: score={type(whale_stats.score)}, roi={type(whale_stats.roi)}, trades={type(whale_stats.trades)}, win_rate={type(whale_stats.win_rate)}")
             
@@ -712,6 +714,7 @@ class WhaleTracker:
             return 0.0
         
         # Extract metrics with safe conversion
+        # whale_data[1] = moralis_roi_pct (correct)
         try:
             if whale_data[1] is None or whale_data[1] == '':
                 roi_pct = 0.0

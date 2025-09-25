@@ -573,15 +573,15 @@ def main():
                             
                             allocator.whale_tracker.whale_scores[whale_address] = WhaleStats(
                                 address=whale_address,
-                                score=safe_decimal(whale_data[7], "0"),  # existing score
-                                roi=safe_decimal(whale_data[4], "0"),    # cumulative_pnl  
-                                trades=whale_data[3] or 0,               # trades
-                                win_rate=safe_decimal(whale_data[8], "0"), # win_rate
+                                score=safe_decimal(whale_data[9], "0"),  # score (index 9)
+                                roi=safe_decimal(whale_data[6], "0"),    # cumulative_pnl (index 6)
+                                trades=whale_data[3] or 0,               # trades (index 3)
+                                win_rate=safe_decimal(whale_data[10], "0"), # win_rate (index 10)
                                 volatility=Decimal("1"),
                                 sharpe_ratio=Decimal("0"),
-                                moralis_roi_pct=safe_decimal(whale_data[1], "0"),
-                                moralis_profit_usd=safe_decimal(whale_data[2], "0"),
-                                moralis_trades=whale_data[3] or 0
+                                moralis_roi_pct=safe_decimal(whale_data[1], "0"),  # moralis_roi_pct (index 1)
+                                moralis_profit_usd=safe_decimal(whale_data[2], "0"), # roi_usd (index 2)
+                                moralis_trades=whale_data[3] or 0  # trades (index 3)
                             )
                     
                     # Calculate new score
