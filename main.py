@@ -589,6 +589,9 @@ def main():
                         
                 except Exception as e:
                     logger.error(f"Error recalculating score for {whale_address}: {e}")
+                    logger.error(f"Error type: {type(e)}")
+                    import traceback
+                    logger.error(f"Full traceback: {traceback.format_exc()}")
             
             logger.info(f"Score recalculation completed! Updated {updated_count}/{len(allocator.whale_tracker.tracked_whales)} whales.")
             return
