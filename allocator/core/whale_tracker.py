@@ -785,17 +785,10 @@ class WhaleTracker:
             logger.error(f"Error calculating adjusted score for {whale_address}: {e}")
             adjusted_score = base_score
         
-            logger.info(f"Whale {whale_address} Score v2.0: base={base_score:.2f}, "
-                       f"diversity={diversity_factor:.3f}, adjusted={adjusted_score:.2f}")
-            
-            return adjusted_score
-            
-        except Exception as e:
-            logger.error(f"Unexpected error in calculate_score_v2 for {whale_address}: {e}")
-            logger.error(f"Error type: {type(e)}")
-            import traceback
-            logger.error(f"Traceback: {traceback.format_exc()}")
-            return 0.0
+        logger.info(f"Whale {whale_address} Score v2.0: base={base_score:.2f}, "
+                   f"diversity={diversity_factor:.3f}, adjusted={adjusted_score:.2f}")
+        
+        return adjusted_score
     
     def update_whale_token_trade(self, whale_address: str, token_symbol: str, 
                                 pnl_change: float, token_address: str = None) -> None:

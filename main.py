@@ -586,7 +586,7 @@ def main():
                     
                     # Calculate new score
                     new_score = allocator.whale_tracker.calculate_score_v2(whale_address)
-                    if new_score > 0:
+                    if new_score is not None and new_score > 0:
                         allocator.db_manager.update_whale_performance(whale_address, score=new_score)
                         updated_count += 1
                         
@@ -596,6 +596,8 @@ def main():
                         
                         logger.info(f"Updated {whale_address[:10]}...: Score v2.0 = {new_score:.2f} "
                                   f"(diversity: {diversity:.3f}, tokens: {len(tokens)})")
+                    elif new_score is None:
+                        logger.warning(f"Whale {whale_address} calculated score is None - skipping update")
                     else:
                         logger.warning(f"Whale {whale_address} calculated score is 0 - skipping update")
                         
