@@ -309,7 +309,7 @@ class WhaleTracker:
         # Estimate initial score based on Moralis data
         # Simple heuristic: ROI% * sqrt(trades) / 10
         if moralis_trades > 0:
-            estimated_score = float(moralis_roi_pct * (moralis_trades ** 0.5) / 10)
+            estimated_score = float(moralis_roi_pct * Decimal(str(moralis_trades ** 0.5)) / Decimal("10"))
         else:
             estimated_score = 0.0
         
@@ -584,7 +584,7 @@ class WhaleTracker:
                         new_risk = 0.8
                     
                     if moralis_trades > 0:
-                        new_score = float(moralis_roi_decimal * (moralis_trades ** 0.5) / 10)
+                        new_score = float(moralis_roi_decimal * Decimal(str(moralis_trades ** 0.5)) / Decimal("10"))
                     else:
                         new_score = 0.0
                     
