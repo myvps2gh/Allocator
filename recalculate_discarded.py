@@ -16,8 +16,6 @@ project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
 from allocator.data.database import DatabaseManager
-from allocator.core.whale_tracker import WhaleTracker
-from allocator.config.settings import load_config
 
 # Set up logging
 logging.basicConfig(
@@ -31,9 +29,8 @@ def recalculate_discarded_whales():
     
     logger.info("Starting discarded whales recalculation...")
     
-    # Initialize database and whale tracker
+    # Initialize database
     db_manager = DatabaseManager("whales.db")
-    whale_tracker = WhaleTracker(db_manager)
     
     # Get all whales from database (including already discarded ones)
     all_whales = db_manager.conn.execute("SELECT * FROM whales").fetchall()
