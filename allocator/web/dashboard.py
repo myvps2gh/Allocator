@@ -416,9 +416,22 @@ DASHBOARD_TEMPLATE = """
             console.log('=== SORTING DEBUG ===');
             console.log('Sorting by column:', column);
             
-            const table = document.querySelector('table');
+            // Find the whale performance table specifically
+            const tables = document.querySelectorAll('table');
+            console.log('Found', tables.length, 'tables on page');
+            
+            let table = null;
+            for (let i = 0; i < tables.length; i++) {
+                const tableHeader = tables[i].querySelector('h2');
+                if (tableHeader && tableHeader.textContent.includes('Whale Performance')) {
+                    table = tables[i];
+                    console.log('Found Whale Performance table at index', i);
+                    break;
+                }
+            }
+            
             if (!table) {
-                console.error('Table not found!');
+                console.error('Whale Performance table not found!');
                 return;
             }
             
