@@ -496,8 +496,9 @@ class WhaleAnalyzer:
         
         for i, whale in enumerate(analyses, 1):
             # Get top 5 tokens for display
-            top_tokens = sorted(whale.token_breakdown, key=lambda x: x[1], reverse=True)[:5]
-            top_tokens = [(symbol, pnl, trades) for symbol, pnl, trades in top_tokens if symbol != "PROCESSED"]
+            # token_breakdown format: (symbol, address, pnl, trades, last_updated)
+            top_tokens = sorted(whale.token_breakdown, key=lambda x: x[2], reverse=True)[:5]
+            top_tokens = [(row[0], row[2], row[3]) for row in top_tokens if row[0] != "PROCESSED"]
             
             html_content += f"""
         <div class="whale-card {whale.recommendation.lower()}">
