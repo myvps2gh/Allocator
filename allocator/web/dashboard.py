@@ -421,17 +421,18 @@ DASHBOARD_TEMPLATE = """
             console.log('Found', tables.length, 'tables on page');
             
             let table = null;
+            // Look for table with sortable headers (our whale table has sortable class)
             for (let i = 0; i < tables.length; i++) {
-                const tableHeader = tables[i].querySelector('h2');
-                if (tableHeader && tableHeader.textContent.includes('Whale Performance')) {
+                const sortableHeaders = tables[i].querySelectorAll('.sortable');
+                if (sortableHeaders.length > 0) {
                     table = tables[i];
-                    console.log('Found Whale Performance table at index', i);
+                    console.log('Found table with sortable headers at index', i, 'with', sortableHeaders.length, 'sortable columns');
                     break;
                 }
             }
             
             if (!table) {
-                console.error('Whale Performance table not found!');
+                console.error('Table with sortable headers not found!');
                 return;
             }
             
