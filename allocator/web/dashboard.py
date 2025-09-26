@@ -693,11 +693,11 @@ ANALYSIS_TEMPLATE = """
                 </div>
                 <div class="metric">
                     <div class="metric-label">Profit</div>
-                    <div class="metric-value">${{ "{:,.0f}"|format(whale.profit_usd) }}</div>
+                    <div class="metric-value">${{ "%.0f"|format(whale.profit_usd) }}</div>
                 </div>
                 <div class="metric">
                     <div class="metric-label">Trades</div>
-                    <div class="metric-value">{{ "{:,}"|format(whale.trades) }}</div>
+                    <div class="metric-value">{{ whale.trades }}</div>
                 </div>
                 <div class="metric">
                     <div class="metric-label">Win Rate</div>
