@@ -49,7 +49,7 @@ def show_top_whales(n=10):
         token_breakdown = db_manager.get_whale_token_breakdown(address)
         token_count = len([t for t in token_breakdown if t[0] != "PROCESSED"])
         
-        logger.info(f"  {i:2d}   | {address[:10]}... | {score:6.2f} | {trades:6d} | {token_count:6d} | {roi:5.1f}% | {win_rate*100:7.1f}% | {risk:4.2f}")
+        logger.info(f"  {i:2d}   | {address} | {score:6.2f} | {trades:6d} | {token_count:6d} | {roi:5.1f}% | {win_rate*100:7.1f}% | {risk:4.2f}")
     
     logger.info(f"\n💡 Copy any address above to start following that whale!")
     logger.info(f"💡 Higher score = better overall performance")
