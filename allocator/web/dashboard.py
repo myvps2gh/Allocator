@@ -438,9 +438,9 @@ def create_app(whale_tracker, risk_manager, db_manager, mode: str = "LIVE") -> F
             # Get whale data from database, sorted by Score v2.0 (descending)
             whale_data = []
             db_whales = db_manager.get_all_whales_sorted_by_score()
-            print(f"DEBUG: Retrieved {len(db_whales)} whales from database")
+            app.logger.info(f"DEBUG: Retrieved {len(db_whales)} whales from database")
             for i, whale in enumerate(db_whales[:3]):  # Show first 3 for debugging
-                print(f"DEBUG: Whale {i}: address={whale[0][:10]}..., score={whale[9]}")
+                app.logger.info(f"DEBUG: Whale {i}: address={whale[0][:10]}..., score={whale[9]}")
             
             for whale_row in db_whales:
                 # Database columns: 0=address, 1=moralis_roi_pct, 2=roi_usd, 3=trades, 4=bootstrap_time, 
