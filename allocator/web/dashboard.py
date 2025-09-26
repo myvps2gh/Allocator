@@ -172,6 +172,25 @@ DASHBOARD_TEMPLATE = """
                 font-size: 0.9em;
             }
         }
+        
+        /* Sortable table styles */
+        .sortable {
+            transition: background-color 0.2s ease;
+        }
+        
+        .sortable:hover {
+            background-color: #e9ecef !important;
+        }
+        
+        .sort-arrow {
+            margin-left: 5px;
+            font-size: 0.8em;
+            color: #6c757d;
+        }
+        
+        .sortable[data-column="score"] .sort-arrow {
+            color: #007bff;
+        }
     </style>
 </head>
 <body>
@@ -247,15 +266,15 @@ DASHBOARD_TEMPLATE = """
             <table id="whale-performance-table" style="width: 100%; min-width: 1200px; border-collapse: collapse;">
                 <thead>
                     <tr style="background: #f8f9fa;">
-                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Whale Address</th>
-                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Cumulative PnL</th>
-                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Risk Multiplier</th>
-                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Allocation Size</th>
-                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Trade Count</th>
-                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Score v2.0 ↓</th>
-                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Win Rate</th>
-                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; width: 100px;">Moralis ROI%</th>
-                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; width: 120px;">Moralis PnL $</th>
+                        <th class="sortable" data-column="address" style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; cursor: pointer; user-select: none;">Whale Address <span class="sort-arrow">↕</span></th>
+                        <th class="sortable" data-column="pnl" style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; cursor: pointer; user-select: none;">Cumulative PnL <span class="sort-arrow">↕</span></th>
+                        <th class="sortable" data-column="risk" style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; cursor: pointer; user-select: none;">Risk Multiplier <span class="sort-arrow">↕</span></th>
+                        <th class="sortable" data-column="allocation" style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; cursor: pointer; user-select: none;">Allocation Size <span class="sort-arrow">↕</span></th>
+                        <th class="sortable" data-column="count" style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; cursor: pointer; user-select: none;">Trade Count <span class="sort-arrow">↕</span></th>
+                        <th class="sortable" data-column="score" style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; cursor: pointer; user-select: none;">Score v2.0 <span class="sort-arrow">↓</span></th>
+                        <th class="sortable" data-column="winrate" style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; cursor: pointer; user-select: none;">Win Rate <span class="sort-arrow">↕</span></th>
+                        <th class="sortable" data-column="moralis_roi" style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; width: 100px; cursor: pointer; user-select: none;">Moralis ROI% <span class="sort-arrow">↕</span></th>
+                        <th class="sortable" data-column="moralis_profit_usd" style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; width: 120px; cursor: pointer; user-select: none;">Moralis PnL $ <span class="sort-arrow">↕</span></th>
                         <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; width: 80px;">Tokens</th>
                         <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; width: 100px;">Actions</th>
                     </tr>
@@ -409,7 +428,118 @@ DASHBOARD_TEMPLATE = """
             }
         }
 
-        // Table sorting removed - now using database-level sorting
+        // Table sorting functionality
+        let currentSort = { column: 'score', direction: 'desc' };
+        
+        function sortTable(column) {
+            const table = document.getElementById('whale-performance-table');
+            const tbody = table.querySelector('tbody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            
+            // Determine sort direction
+            if (currentSort.column === column) {
+                currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSort.direction = 'asc';
+            }
+            currentSort.column = column;
+            
+            // Sort rows
+            rows.sort((a, b) => {
+                let aVal, bVal;
+                
+                switch(column) {
+                    case 'address':
+                        aVal = a.cells[0].textContent.trim();
+                        bVal = b.cells[0].textContent.trim();
+                        return currentSort.direction === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+                    
+                    case 'pnl':
+                        aVal = parseFloat(a.cells[1].textContent.replace(/[$,]/g, '')) || 0;
+                        bVal = parseFloat(b.cells[1].textContent.replace(/[$,]/g, '')) || 0;
+                        break;
+                    
+                    case 'risk':
+                        aVal = parseFloat(a.cells[2].textContent) || 0;
+                        bVal = parseFloat(b.cells[2].textContent) || 0;
+                        break;
+                    
+                    case 'allocation':
+                        aVal = parseFloat(a.cells[3].textContent.replace(/[$,]/g, '')) || 0;
+                        bVal = parseFloat(b.cells[3].textContent.replace(/[$,]/g, '')) || 0;
+                        break;
+                    
+                    case 'count':
+                        aVal = parseInt(a.cells[4].textContent.replace(/,/g, '')) || 0;
+                        bVal = parseInt(b.cells[4].textContent.replace(/,/g, '')) || 0;
+                        break;
+                    
+                    case 'score':
+                        aVal = parseFloat(a.cells[5].textContent) || 0;
+                        bVal = parseFloat(b.cells[5].textContent) || 0;
+                        break;
+                    
+                    case 'winrate':
+                        aVal = parseFloat(a.cells[6].textContent.replace('%', '')) || 0;
+                        bVal = parseFloat(b.cells[6].textContent.replace('%', '')) || 0;
+                        break;
+                    
+                    case 'moralis_roi':
+                        aVal = parseFloat(a.cells[7].textContent.replace('%', '')) || 0;
+                        bVal = parseFloat(b.cells[7].textContent.replace('%', '')) || 0;
+                        break;
+                    
+                    case 'moralis_profit_usd':
+                        aVal = parseFloat(a.cells[8].textContent.replace(/[$,]/g, '')) || 0;
+                        bVal = parseFloat(b.cells[8].textContent.replace(/[$,]/g, '')) || 0;
+                        break;
+                    
+                    default:
+                        return 0;
+                }
+                
+                if (currentSort.direction === 'asc') {
+                    return aVal - bVal;
+                } else {
+                    return bVal - aVal;
+                }
+            });
+            
+            // Clear tbody and re-append sorted rows
+            tbody.innerHTML = '';
+            rows.forEach(row => tbody.appendChild(row));
+            
+            // Update sort indicators
+            updateSortIndicators();
+        }
+        
+        function updateSortIndicators() {
+            // Reset all arrows
+            document.querySelectorAll('.sort-arrow').forEach(arrow => {
+                arrow.textContent = '↕';
+            });
+            
+            // Set current sort arrow
+            const currentHeader = document.querySelector(`[data-column="${currentSort.column}"] .sort-arrow`);
+            if (currentHeader) {
+                currentHeader.textContent = currentSort.direction === 'asc' ? '↑' : '↓';
+            }
+        }
+        
+        // Add click event listeners to sortable headers
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('.sortable').forEach(header => {
+                header.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const column = this.getAttribute('data-column');
+                    sortTable(column);
+                });
+            });
+            
+            // Set initial sort indicator
+            updateSortIndicators();
+        });
     </script>
 </body>
 </html>
