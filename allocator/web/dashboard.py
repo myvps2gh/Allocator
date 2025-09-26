@@ -244,7 +244,7 @@ DASHBOARD_TEMPLATE = """
     <div class="table-container">
         <h2 style="margin: 0; padding: 20px; background: #f8f9fa; border-bottom: 1px solid #dee2e6;">Whale Performance</h2>
         <div style="overflow-x: auto;">
-            <table style="width: 100%; min-width: 1200px; border-collapse: collapse;">
+            <table id="whale-performance-table" style="width: 100%; min-width: 1200px; border-collapse: collapse;">
                 <thead>
                     <tr style="background: #f8f9fa;">
                         <th class="sortable" data-column="address" style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; cursor: pointer; user-select: none;">Whale Address <span class="sort-indicator">↕</span></th>
@@ -416,9 +416,9 @@ DASHBOARD_TEMPLATE = """
             console.log('=== SORTING DEBUG ===');
             console.log('Sorting by column:', column);
             
-            const table = document.querySelector('table');
+            const table = document.getElementById('whale-performance-table');
             if (!table) {
-                console.error('Table not found!');
+                console.error('Whale Performance table not found!');
                 return;
             }
             
