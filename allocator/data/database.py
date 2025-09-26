@@ -81,6 +81,11 @@ class DatabaseManager:
         except sqlite3.OperationalError:
             pass  # Column already exists
         
+        try:
+            self.conn.execute("ALTER TABLE whales ADD COLUMN discarded_timestamp TIMESTAMP")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+        
         # Create trades table for detailed trade history
         self.conn.execute("""
         CREATE TABLE IF NOT EXISTS trades (
@@ -233,15 +238,64 @@ class DatabaseManager:
                 return []
     
     def get_all_whales_sorted_by_score(self) -> List[Tuple]:
-        """Get all whales from database sorted by Score v2.0 (descending)"""
+        """Get all non-discarded whales from database sorted by Score v2.0 (descending)"""
         with self.lock:
             try:
-                cursor = self.conn.execute("SELECT * FROM whales ORDER BY score DESC")
+                cursor = self.conn.execute("SELECT * FROM whales WHERE discarded_timestamp IS NULL ORDER BY score DESC")
                 return cursor.fetchall()
             except sqlite3.Error as e:
                 logger.error(f"Database error getting whales sorted by score: {e}")
                 return []
     
+    def mark_whale_discarded(self, addr: str, reason: str = None) -> bool:
+        """Mark a whale as discarded with timestamp and reason"""
+        addr_lower = addr.lower()
+        current_time = int(time.time())
+        
+        with self.lock:
+            try:
+                self.conn.execute("""
+                    UPDATE whales 
+                    SET discarded_timestamp = ?, last_refresh = ?
+                    WHERE address = ?
+                """, (current_time, current_time, addr_lower))
+                self.conn.commit()
+                
+                logger.info(f"Marked whale {addr_lower[:10]}... as discarded. Reason: {reason or 'Insufficient trades/tokens'}")
+                return True
+            except sqlite3.Error as e:
+                logger.error(f"Database error marking whale as discarded {addr}: {e}")
+                return False
+    
+    def get_discarded_whales(self) -> List[Tuple]:
+        """Get all discarded whales from database"""
+        with self.lock:
+            try:
+                cursor = self.conn.execute("SELECT * FROM whales WHERE discarded_timestamp IS NOT NULL ORDER BY discarded_timestamp DESC")
+                return cursor.fetchall()
+            except sqlite3.Error as e:
+                logger.error(f"Database error getting discarded whales: {e}")
+                return []
+    
+    def rescan_whale(self, addr: str) -> bool:
+        """Remove discarded status from a whale to allow rescanning"""
+        addr_lower = addr.lower()
+        
+        with self.lock:
+            try:
+                self.conn.execute("""
+                    UPDATE whales 
+                    SET discarded_timestamp = NULL, last_refresh = ?
+                    WHERE address = ?
+                """, (int(time.time()), addr_lower))
+                self.conn.commit()
+                
+                logger.info(f"Removed discarded status from whale {addr_lower[:10]}... - ready for rescanning")
+                return True
+            except sqlite3.Error as e:
+                logger.error(f"Database error rescanning whale {addr}: {e}")
+                return False
+
     def update_whale_performance(self, addr: str, cumulative_pnl: float = None, 
                                 risk_multiplier: float = None, allocation_size: float = None,
                                 score: float = None, win_rate: float = None) -> bool:

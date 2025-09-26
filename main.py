@@ -713,6 +713,10 @@ def main():
                        help="Process adaptive candidates (validate with Moralis and fetch tokens)")
     parser.add_argument("--show-adaptive", action="store_true",
                        help="Show status of adaptive candidates")
+    parser.add_argument("--show-discarded", action="store_true",
+                       help="Show all discarded whales")
+    parser.add_argument("--rescan-whale", type=str, metavar="ADDRESS",
+                       help="Remove discarded status from a whale to allow rescanning")
     
     args = parser.parse_args()
     
@@ -945,6 +949,52 @@ def main():
                 logger.info("Recent candidates:")
                 for address, status, roi, profit, trades in recent:
                     logger.info(f"  {address[:10]}... | {status} | {roi or 'N/A'}% ROI | ${profit or 'N/A'} | {trades or 'N/A'} trades")
+            
+            return
+        
+        # Handle show discarded whales command
+        if args.show_discarded:
+            logger.info("Discarded Whales:")
+            
+            discarded_whales = allocator.db_manager.get_discarded_whales()
+            if not discarded_whales:
+                logger.info("  No discarded whales found")
+                return
+            
+            logger.info(f"  Found {len(discarded_whales)} discarded whales:")
+            logger.info("  Address | Score | Trades | ROI% | Discarded Time")
+            logger.info("  " + "-" * 80)
+            
+            for whale_data in discarded_whales:
+                address = whale_data[0]
+                score = whale_data[9] if len(whale_data) > 9 else 0
+                trades = whale_data[3] if len(whale_data) > 3 else 0
+                roi = whale_data[1] if len(whale_data) > 1 else 0
+                discarded_time = whale_data[11] if len(whale_data) > 11 else "Unknown"
+                
+                # Convert timestamp to readable format
+                if discarded_time and discarded_time != "Unknown":
+                    try:
+                        import datetime
+                        discarded_time = datetime.datetime.fromtimestamp(int(discarded_time)).strftime('%Y-%m-%d %H:%M:%S')
+                    except:
+                        pass
+                
+                logger.info(f"  {address[:10]}... | {score:.2f} | {trades} | {roi:.2f}% | {discarded_time}")
+            
+            return
+        
+        # Handle rescan whale command
+        if args.rescan_whale:
+            whale_address = args.rescan_whale
+            logger.info(f"Removing discarded status from whale {whale_address}...")
+            
+            success = allocator.db_manager.rescan_whale(whale_address)
+            if success:
+                logger.info(f"Successfully removed discarded status from {whale_address}")
+                logger.info("Whale is now ready for rescanning")
+            else:
+                logger.error(f"Failed to remove discarded status from {whale_address}")
             
             return
         

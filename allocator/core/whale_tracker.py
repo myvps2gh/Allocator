@@ -809,6 +809,23 @@ class WhaleTracker:
             logger.error(f"Error calculating diversity factor for {whale_address}: {e}")
             diversity_factor = 0.1  # Default to minimum diversity
         
+        # Check minimum requirements for valid whale
+        MIN_TRADES = 20
+        MIN_TOKENS = 5
+        
+        # Get token count for this whale
+        token_breakdown = self.db.get_whale_token_breakdown(whale_address)
+        token_count = len([t for t in token_breakdown if t[0] != "PROCESSED"])  # Exclude PROCESSED marker
+        
+        # Check if whale meets minimum requirements
+        if trades < MIN_TRADES or token_count < MIN_TOKENS:
+            reason = f"< {MIN_TRADES} trades ({trades}) or < {MIN_TOKENS} tokens ({token_count})"
+            logger.info(f"Whale {whale_address} does not meet minimum requirements: {reason}")
+            
+            # Mark as discarded
+            self.db.mark_whale_discarded(whale_address, reason)
+            return 0.0  # Return 0 score for discarded whales
+        
         # Apply diversity adjustment
         try:
             adjusted_score = base_score * (0.1 + 0.9 * diversity_factor)
@@ -817,7 +834,8 @@ class WhaleTracker:
             adjusted_score = base_score
         
         logger.info(f"Whale {whale_address} Score v2.0: base={base_score:.2f}, "
-                   f"diversity={diversity_factor:.3f}, adjusted={adjusted_score:.2f}")
+                   f"diversity={diversity_factor:.3f}, adjusted={adjusted_score:.2f}, "
+                   f"trades={trades}, tokens={token_count}")
         
         return adjusted_score
     
