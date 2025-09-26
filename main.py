@@ -150,6 +150,42 @@ class AllocatorAI:
             logger.error(f"Failed to store candidate {address}: {e}")
             return False
     
+    def _update_adaptive_candidate_status(self, address: str, status: str):
+        """Update candidate status"""
+        try:
+            self.db_manager.conn.execute("""
+                UPDATE adaptive_candidates 
+                SET status = ?, processed_at = CURRENT_TIMESTAMP
+                WHERE address = ?
+            """, (status, address))
+            self.db_manager.conn.commit()
+        except Exception as e:
+            logger.error(f"Failed to update status for {address}: {e}")
+    
+    def _update_adaptive_candidate_moralis(self, address: str, moralis_data: dict, status: str):
+        """Update candidate with Moralis data"""
+        try:
+            self.db_manager.conn.execute("""
+                UPDATE adaptive_candidates 
+                SET moralis_validated = ?,
+                    moralis_roi_pct = ?,
+                    moralis_profit_usd = ?,
+                    moralis_trades = ?,
+                    status = ?,
+                    processed_at = CURRENT_TIMESTAMP
+                WHERE address = ?
+            """, (
+                status == "validated",
+                float(moralis_data["realized_pct"]),
+                float(moralis_data["realized_usd"]),
+                moralis_data["total_trades"],
+                status,
+                address
+            ))
+            self.db_manager.conn.commit()
+        except Exception as e:
+            logger.error(f"Failed to update Moralis data for {address}: {e}")
+    
     def setup_wallet(self, wallet_file: str = "wallet.json"):
         """Setup wallet and trade executor"""
         try:
@@ -412,9 +448,7 @@ class AllocatorAI:
                             whale_preview = [whale[:10] + "..." for whale in whales[:3]]
                             logger.info(f"Mode {mode} result: {len(whales)} whales {whale_preview}")
                     
-                    # Fetch token data for newly discovered whales in background
-                    if total_validated > 0:
-                        self._fetch_token_data_background(all_validated_whales)
+                    # Token data fetching is now handled immediately during validation
                     
                     # Wait before next discovery round
                     refresh_interval = self.config.discovery.refresh_interval
@@ -430,47 +464,9 @@ class AllocatorAI:
         discovery_thread.start()
         logger.info(f"Started PARALLEL whale discovery for {len(self.config.discovery.modes)} modes using HTTP connections")
     
-    def _fetch_token_data_background(self, all_validated_whales: dict):
-        """Fetch token data for newly discovered whales in background thread"""
-        def token_fetcher():
-            try:
-                total_whales = sum(len(whales) for whales in all_validated_whales.values())
-                if total_whales == 0:
-                    return
-                
-                logger.info(f"Starting background token data fetching for {total_whales} whales...")
-                processed_count = 0
-                
-                for mode, whales in all_validated_whales.items():
-                    for i, whale_address in enumerate(whales):
-                        try:
-                            logger.info(f"Fetching token data for whale {processed_count + 1}/{total_whales}: {whale_address[:10]}...")
-                            start_time = time.time()
-                            
-                            # Fetch token data
-                            self.whale_tracker.fetch_token_data_from_moralis(whale_address)
-                            processed_count += 1
-                            
-                            elapsed = time.time() - start_time
-                            logger.info(f"✅ Token data fetched for {whale_address[:10]}... ({elapsed:.1f}s)")
-                            
-                            # Delay to respect rate limits
-                            time.sleep(1)
-                            
-                        except Exception as e:
-                            logger.error(f"Error fetching token data for {whale_address[:10]}...: {e}")
-                
-                logger.info(f"Background token data fetching completed: {processed_count}/{total_whales} whales processed")
-                
-            except Exception as e:
-                logger.error(f"Background token fetching failed: {e}")
-        
-        # Start token fetching in background thread
-        token_thread = threading.Thread(target=token_fetcher, daemon=True)
-        token_thread.start()
     
     def _run_adaptive_discovery_mode(self):
-        """Run adaptive percentile-based discovery mode (discovery only, no validation)"""
+        """Run adaptive percentile-based discovery mode with automatic validation and token fetching"""
         try:
             logger.info("Starting discovery with mode: adaptive_percentile")
             start_time = time.time()
@@ -501,7 +497,7 @@ class AllocatorAI:
             logger.info(f"Running adaptive discovery: top {activity_percentile}% activity, "
                        f"top {profit_percentile}% profit over {blocks_back} blocks")
             
-            # Run adaptive discovery (discovery only, no validation)
+            # Run adaptive discovery
             result = self.whale_tracker.adaptive_engine.discover_whales_percentile(
                 activity_percentile=activity_percentile,
                 profit_percentile=profit_percentile,
@@ -509,123 +505,82 @@ class AllocatorAI:
             )
             
             candidates = result.get("candidates", [])
+            logger.info(f"Found {len(candidates)} adaptive candidates")
             
-            scan_duration = time.time() - start_time
-            logger.info(f"Discovery mode adaptive_percentile found {len(candidates)} candidate whales in {scan_duration:.1f}s")
-            
-            # Store candidates and immediately validate them (like old discovery modes)
-            stored_count = 0
-            validated_whales = []
-            
+            # Store candidates in database
+            new_candidates = []
             for candidate in candidates[:20]:  # Limit to 20 candidates for performance
                 if self._store_adaptive_candidate(candidate, result):
-                    stored_count += 1
-                    
-                    # Immediately validate with Moralis (unless in DRY_RUN_WO_MOR mode)
-                    if self.mode == "DRY_RUN_WO_MOR":
-                        logger.info(f"Mode adaptive_percentile: Skipping Moralis validation (DRY_RUN_WO_MOR)")
-                        validated_whales.append(candidate)
-                    else:
-                        try:
-                            logger.info(f"Validating candidate {stored_count}/{len(candidates[:20])}: {candidate[:10]}...")
-                            start_time = time.time()
-                            
-                            # Fetch Moralis data first to get detailed metrics
-                            moralis_data = self.whale_tracker.fetch_moralis_data(candidate)
-                            if not moralis_data:
-                                logger.warning(f"Failed to fetch Moralis data for {candidate[:10]}...")
-                                # Update adaptive candidates table to mark as failed
-                                self.db_manager.conn.execute("""
-                                    UPDATE adaptive_candidates 
-                                    SET moralis_validated = FALSE, status = 'failed_moralis'
-                                    WHERE address = ?
-                                """, (candidate,))
-                                self.db_manager.conn.commit()
-                                continue
-                            
-                            # Check if meets criteria with detailed logging
-                            min_roi_pct = self.config.trading.min_moralis_roi_pct
-                            min_profit_usd = self.config.trading.min_moralis_profit_usd
-                            min_trades = self.config.trading.min_moralis_trades
-                            
-                            if (moralis_data["realized_pct"] < min_roi_pct or 
-                                moralis_data["realized_usd"] < min_profit_usd or 
-                                moralis_data["total_trades"] < min_trades):
-                                logger.info(f"Candidate {candidate[:10]}... rejected: "
-                                          f"{moralis_data['realized_pct']}% ROI, "
-                                          f"${moralis_data['realized_usd']} profit, "
-                                          f"{moralis_data['total_trades']} trades")
-                                
-                                # Update adaptive candidates table with Moralis data and mark as rejected
-                                self.db_manager.conn.execute("""
-                                    UPDATE adaptive_candidates 
-                                    SET moralis_validated = FALSE, 
-                                        moralis_roi_pct = ?,
-                                        moralis_profit_usd = ?,
-                                        moralis_trades = ?,
-                                        status = 'rejected'
-                                    WHERE address = ?
-                                """, (
-                                    float(moralis_data["realized_pct"]),
-                                    float(moralis_data["realized_usd"]),
-                                    moralis_data["total_trades"],
-                                    candidate
-                                ))
-                                self.db_manager.conn.commit()
-                                continue
-                            
-                            # Check Moralis PnL to see if whale is worth tracking
-                            if self.whale_tracker.bootstrap_whale_from_moralis(
-                                candidate,
-                                min_roi_pct=min_roi_pct,
-                                min_profit_usd=min_profit_usd,
-                                min_trades=min_trades
-                            ):
-                                validated_whales.append(candidate)
-                                elapsed = time.time() - start_time
-                                logger.info(f"✅ Candidate {candidate[:10]}... validated and added to tracking ({elapsed:.1f}s)")
-                                
-                                # Update adaptive candidates table with Moralis data and mark as validated
-                                self.db_manager.conn.execute("""
-                                    UPDATE adaptive_candidates 
-                                    SET moralis_validated = TRUE,
-                                        moralis_roi_pct = ?,
-                                        moralis_profit_usd = ?,
-                                        moralis_trades = ?,
-                                        status = 'validated'
-                                    WHERE address = ?
-                                """, (
-                                    float(moralis_data["realized_pct"]),
-                                    float(moralis_data["realized_usd"]),
-                                    moralis_data["total_trades"],
-                                    candidate
-                                ))
-                                self.db_manager.conn.commit()
-                            else:
-                                logger.info(f"❌ Candidate {candidate[:10]}... rejected by bootstrap_whale_from_moralis")
-                                
-                                # Update adaptive candidates table to mark as rejected
-                                self.db_manager.conn.execute("""
-                                    UPDATE adaptive_candidates 
-                                    SET moralis_validated = FALSE, status = 'rejected'
-                                    WHERE address = ?
-                                """, (candidate,))
-                                self.db_manager.conn.commit()
-                            
-                            # Small delay to respect rate limits
-                            time.sleep(0.5)
-                                
-                        except Exception as e:
-                            logger.error(f"Error validating candidate {candidate[:10]}...: {e}")
-                            # Update adaptive candidates table to mark as error
-                            self.db_manager.conn.execute("""
-                                UPDATE adaptive_candidates 
-                                SET moralis_validated = FALSE, status = 'error'
-                                WHERE address = ?
-                            """, (candidate,))
-                            self.db_manager.conn.commit()
+                    new_candidates.append(candidate)
             
-            logger.info(f"Stored {stored_count} new adaptive candidates, validated {len(validated_whales)} whales")
+            logger.info(f"Stored {len(new_candidates)} new candidates in database")
+            
+            # Validate candidates with Moralis (like test_adaptive_discovery.py)
+            validated_whales = []
+            if new_candidates and self.mode != "DRY_RUN_WO_MOR":
+                logger.info(f"Validating {len(new_candidates)} candidates with Moralis...")
+                
+                for i, candidate in enumerate(new_candidates):
+                    try:
+                        logger.info(f"Validating candidate {i+1}/{len(new_candidates)}: {candidate[:10]}...")
+                        candidate_start_time = time.time()
+                        
+                        # Fetch Moralis data
+                        moralis_data = self.whale_tracker.fetch_moralis_data(candidate)
+                        if not moralis_data:
+                            logger.warning(f"Failed to fetch Moralis data for {candidate[:10]}...")
+                            self._update_adaptive_candidate_status(candidate, "failed_moralis")
+                            continue
+                        
+                        # Check if meets criteria
+                        min_roi_pct = self.config.trading.min_moralis_roi_pct
+                        min_profit_usd = self.config.trading.min_moralis_profit_usd
+                        min_trades = self.config.trading.min_moralis_trades
+                        
+                        if (moralis_data["realized_pct"] < min_roi_pct or 
+                            moralis_data["realized_usd"] < min_profit_usd or 
+                            moralis_data["total_trades"] < min_trades):
+                            logger.info(f"Candidate {candidate[:10]}... rejected: "
+                                      f"{moralis_data['realized_pct']}% ROI, "
+                                      f"${moralis_data['realized_usd']} profit, "
+                                      f"{moralis_data['total_trades']} trades")
+                            self._update_adaptive_candidate_moralis(candidate, moralis_data, "rejected")
+                            continue
+                        
+                        # Add to main whales table
+                        if self.whale_tracker.bootstrap_whale_from_moralis(candidate):
+                            validated_whales.append(candidate)
+                            self._update_adaptive_candidate_moralis(candidate, moralis_data, "validated")
+                            
+                            # Immediately fetch token data (like test_adaptive_discovery.py)
+                            try:
+                                logger.info(f"Fetching token data for validated whale {candidate[:10]}...")
+                                token_start_time = time.time()
+                                self.whale_tracker.fetch_token_data_from_moralis(candidate)
+                                self._update_adaptive_candidate_status(candidate, "tokens_fetched")
+                                token_elapsed = time.time() - token_start_time
+                                logger.info(f"✅ Token data fetched for {candidate[:10]}... ({token_elapsed:.1f}s)")
+                            except Exception as e:
+                                logger.error(f"Error fetching token data for {candidate[:10]}...: {e}")
+                                self._update_adaptive_candidate_status(candidate, "token_error")
+                            
+                            candidate_elapsed = time.time() - candidate_start_time
+                            logger.info(f"✅ Candidate {candidate[:10]}... validated and added to tracking ({candidate_elapsed:.1f}s)")
+                        else:
+                            logger.info(f"❌ Candidate {candidate[:10]}... rejected by bootstrap_whale_from_moralis")
+                            self._update_adaptive_candidate_moralis(candidate, moralis_data, "rejected")
+                        
+                        # Small delay to respect rate limits
+                        time.sleep(0.5)
+                        
+                    except Exception as e:
+                        logger.error(f"Error validating {candidate[:10]}...: {e}")
+                        self._update_adaptive_candidate_status(candidate, "error")
+                
+                logger.info(f"Validated {len(validated_whales)} candidates successfully")
+            elif self.mode == "DRY_RUN_WO_MOR":
+                logger.info("Mode adaptive_percentile: Skipping Moralis validation (DRY_RUN_WO_MOR)")
+                validated_whales = new_candidates
             
             # Log detailed summary like the test script
             if validated_whales:
