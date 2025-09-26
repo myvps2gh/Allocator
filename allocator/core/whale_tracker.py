@@ -871,7 +871,10 @@ class WhaleTracker:
             
             # Call the full profitability endpoint to get the token breakdown
             logger.info(f"Calling Moralis full profitability API for {whale_address}")
+            api_start_time = time.time()
             response = requests.get(profitability_url, headers=headers, timeout=30)
+            api_elapsed = time.time() - api_start_time
+            logger.info(f"Moralis API call completed in {api_elapsed:.1f}s for {whale_address}")
             
             if response.status_code == 200:
                 data = response.json()
@@ -880,27 +883,36 @@ class WhaleTracker:
                 # The full profitability endpoint returns: {"result": [array of token objects]}
                 if "result" in data and isinstance(data["result"], list):
                     # Process the token breakdown from the result array
+                    logger.info(f"Processing {len(data['result'])} tokens for {whale_address}")
+                    processing_start_time = time.time()
                     if self._process_profitability_breakdown(whale_address, data):
+                        processing_elapsed = time.time() - processing_start_time
+                        logger.info(f"Token processing completed in {processing_elapsed:.1f}s for {whale_address}")
                         return
                 else:
                     logger.warning(f"Unexpected profitability structure for {whale_address}: {list(data.keys())}")
                 
-                logger.warning(f"Could not process profitability data for {whale_address}, falling back to transfers")
+                logger.warning(f"Could not process profitability data for {whale_address}")
             else:
-                logger.warning(f"Profitability API failed ({response.status_code}) for {whale_address}, falling back to transfers: {response.text}")
+                logger.warning(f"Profitability API failed ({response.status_code}) for {whale_address}: {response.text}")
             
-            # Fallback to token transfers method
-            token_transfers_url = f"https://deep-index.moralis.io/api/v2.2/{whale_address}/erc20/transfers"
-            params = {
-                "chain": "eth", 
-                "from_date": "2024-08-01",  # Adjust based on your needs
-                "limit": 50  # Conservative limit to avoid API errors
-            }
+            # Fallback to token transfers method (commented out for debugging)
+            # 
+            # token_transfers_url = f"https://deep-index.moralis.io/api/v2.2/{whale_address}/erc20/transfers"
+            # params = {
+            #     "chain": "eth", 
+            #     "from_date": "2024-08-01",  # Adjust based on your needs
+            #     "limit": 50  # Conservative limit to avoid API errors
+            # }
+            # 
+            # logger.info(f"Calling Moralis token transfers API for {whale_address}")
+            # response = requests.get(token_transfers_url, headers=headers, params=params, timeout=30)
             
-            logger.info(f"Calling Moralis token transfers API for {whale_address}")
-            response = requests.get(token_transfers_url, headers=headers, params=params, timeout=30)
+            # Skip fallback processing for debugging
+            logger.warning(f"Could not process token data for {whale_address} - profitability endpoint failed")
+            return
             
-            if response.status_code == 400:
+            # if response.status_code == 400:
                 # Check if it's a limit issue and retry with smaller limits
                 try:
                     error_data = response.json() if response.headers.get('content-type', '').startswith('application/json') else {}
@@ -1074,9 +1086,11 @@ class WhaleTracker:
                     
                     # Store if meaningful activity (realized profit or multiple trades)
                     if abs(realized_profit_eth) > 0.001 or trade_count >= 2:  # $2+ profit or 2+ trades
+                        db_start_time = time.time()
                         self.db.update_whale_token_pnl(whale_address, token_symbol, realized_profit_eth, token_address, trade_count)
+                        db_elapsed = time.time() - db_start_time
                         meaningful_tokens += 1
-                        logger.debug(f"Stored {token_symbol}: ${realized_profit_usd:.2f} ({realized_profit_eth:.6f} ETH), {trade_count} trades")
+                        logger.debug(f"Stored {token_symbol}: ${realized_profit_usd:.2f} ({realized_profit_eth:.6f} ETH), {trade_count} trades (DB: {db_elapsed:.3f}s)")
                     else:
                         logger.debug(f"Skipped {token_symbol}: too small profit (${realized_profit_usd:.2f})")
                         
