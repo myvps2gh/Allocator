@@ -638,7 +638,7 @@ ANALYSIS_TEMPLATE = """
 <body>
     <div class="header">
         <h1>🐋 Whale Copy Trading Analysis</h1>
-        <p>Generated on {{ datetime.now().strftime('%Y-%m-%d %H:%M:%S') }} | Mode: {{ mode }}</p>
+        <p>Generated on {{ moment }} | Mode: {{ mode }}</p>
     </div>
     
     <div class="nav">
@@ -1083,7 +1083,8 @@ def create_app(whale_tracker, risk_manager, db_manager, mode: str = "LIVE") -> F
                                        good_count=good_count,
                                        fair_count=fair_count,
                                        poor_count=poor_count,
-                                       mode=mode)
+                                       mode=mode,
+                                       moment=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
         except Exception as e:
             logger.error(f"Error in whale analysis: {e}")
             return f"Analysis error: {e}", 500
