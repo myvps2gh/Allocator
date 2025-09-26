@@ -41,7 +41,7 @@ class Web3Config:
     timeout: int = 30
 
 
-@dataclass  
+@dataclass
 class AdaptiveDiscoveryConfig:
     """Adaptive discovery configuration"""
     enabled: bool = False
@@ -64,6 +64,8 @@ class DiscoveryConfig:
             self.modes = ["active_whale", "quick_profit_whale", "fast_mover_whale"]
         if self.mode_settings is None:
             self.mode_settings = {}
+        if self.adaptive_discovery is None:
+            self.adaptive_discovery = AdaptiveDiscoveryConfig()
 
 
 @dataclass
