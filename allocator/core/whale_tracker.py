@@ -269,6 +269,7 @@ class WhaleTracker:
             return False
         
         # Check if meets criteria
+        logger.info(f"Validating whale {whale_address}: {moralis_data['realized_pct']}% ROI, ${moralis_data['realized_usd']} profit, {moralis_data['total_trades']} trades")
         if (moralis_data["realized_pct"] < min_roi_pct or 
             moralis_data["realized_usd"] < min_profit_usd or 
             moralis_data["total_trades"] < min_trades):
@@ -452,10 +453,13 @@ class WhaleTracker:
             
             # Validate with Moralis
             validated_whales = []
-            for whale_address in candidates:
+            logger.info(f"Starting Moralis validation for {len(candidates)} adaptive candidates...")
+            for i, whale_address in enumerate(candidates):
                 try:
+                    logger.info(f"Validating candidate {i+1}/{len(candidates)}: {whale_address[:10]}...")
                     if self.bootstrap_whale_from_moralis(whale_address):
                         validated_whales.append(whale_address)
+                        logger.info(f"✅ Candidate {whale_address[:10]}... validated and added")
                         # Track acceptance
                         self.moralis_feedback.track_moralis_acceptance(
                             address=whale_address,
@@ -465,6 +469,7 @@ class WhaleTracker:
                             discovery_mode="adaptive_percentile"
                         )
                     else:
+                        logger.info(f"❌ Candidate {whale_address[:10]}... rejected by Moralis")
                         # Track rejection (reason will be determined in bootstrap_whale_from_moralis)
                         self.moralis_feedback.track_moralis_rejection(
                             address=whale_address,
