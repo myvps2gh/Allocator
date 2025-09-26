@@ -39,7 +39,7 @@ class WhaleAnalysis:
     win_rate: float
     risk_multiplier: float
     token_count: int
-    token_breakdown: List[Tuple[str, float, int]]  # (symbol, pnl, trades)
+    token_breakdown: List[Tuple]  # (symbol, address, pnl, trades, last_updated)
     
     # Calculated metrics
     diversification_score: float
@@ -55,13 +55,14 @@ class WhaleAnalyzer:
     def __init__(self, db_file: str = "whales.db"):
         self.db_manager = DatabaseManager(db_file)
     
-    def calculate_diversification_score(self, token_breakdown: List[Tuple[str, float, int]]) -> float:
+    def calculate_diversification_score(self, token_breakdown: List[Tuple]) -> float:
         """Calculate diversification score (0-100)"""
         if not token_breakdown:
             return 0.0
         
         # Filter out PROCESSED marker and calculate total PnL
-        valid_tokens = [(symbol, pnl, trades) for symbol, pnl, trades in token_breakdown if symbol != "PROCESSED"]
+        # token_breakdown format: (symbol, address, pnl, trades, last_updated)
+        valid_tokens = [(row[0], row[2], row[3]) for row in token_breakdown if row[0] != "PROCESSED"]
         if not valid_tokens:
             return 0.0
         
@@ -85,12 +86,13 @@ class WhaleAnalyzer:
         
         return min(diversification_score + token_bonus, 100)
     
-    def calculate_concentration_risk(self, token_breakdown: List[Tuple[str, float, int]]) -> float:
+    def calculate_concentration_risk(self, token_breakdown: List[Tuple]) -> float:
         """Calculate concentration risk (0-100, higher = more risky)"""
         if not token_breakdown:
             return 100.0
         
-        valid_tokens = [(symbol, pnl, trades) for symbol, pnl, trades in token_breakdown if symbol != "PROCESSED"]
+        # token_breakdown format: (symbol, address, pnl, trades, last_updated)
+        valid_tokens = [(row[0], row[2], row[3]) for row in token_breakdown if row[0] != "PROCESSED"]
         if not valid_tokens:
             return 100.0
         
@@ -211,6 +213,8 @@ class WhaleAnalyzer:
     
     def analyze_whale(self, whale_data: Tuple) -> WhaleAnalysis:
         """Analyze a single whale"""
+        # Database columns: 0=address, 1=moralis_roi_pct, 2=roi_usd, 3=trades, 4=bootstrap_time, 
+        # 5=last_refresh, 6=cumulative_pnl, 7=risk_multiplier, 8=allocation_size, 9=score, 10=win_rate, 11=discarded_timestamp
         address = whale_data[0]
         roi_pct = whale_data[1] if len(whale_data) > 1 else 0
         profit_usd = whale_data[2] if len(whale_data) > 2 else 0
