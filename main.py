@@ -412,8 +412,9 @@ class AllocatorAI:
                             whale_preview = [whale[:10] + "..." for whale in whales[:3]]
                             logger.info(f"Mode {mode} result: {len(whales)} whales {whale_preview}")
                     
-                    # Note: Token data fetching is now handled separately via CLI commands
-                    # or the test_adaptive_discovery.py script
+                    # Fetch token data for newly discovered whales in background
+                    if total_validated > 0:
+                        self._fetch_token_data_background(all_validated_whales)
                     
                     # Wait before next discovery round
                     refresh_interval = self.config.discovery.refresh_interval
@@ -428,6 +429,45 @@ class AllocatorAI:
         discovery_thread = threading.Thread(target=discovery_worker, daemon=True)
         discovery_thread.start()
         logger.info(f"Started PARALLEL whale discovery for {len(self.config.discovery.modes)} modes using HTTP connections")
+    
+    def _fetch_token_data_background(self, all_validated_whales: dict):
+        """Fetch token data for newly discovered whales in background thread"""
+        def token_fetcher():
+            try:
+                total_whales = sum(len(whales) for whales in all_validated_whales.values())
+                if total_whales == 0:
+                    return
+                
+                logger.info(f"Starting background token data fetching for {total_whales} whales...")
+                processed_count = 0
+                
+                for mode, whales in all_validated_whales.items():
+                    for i, whale_address in enumerate(whales):
+                        try:
+                            logger.info(f"Fetching token data for whale {processed_count + 1}/{total_whales}: {whale_address[:10]}...")
+                            start_time = time.time()
+                            
+                            # Fetch token data
+                            self.whale_tracker.fetch_token_data_from_moralis(whale_address)
+                            processed_count += 1
+                            
+                            elapsed = time.time() - start_time
+                            logger.info(f"✅ Token data fetched for {whale_address[:10]}... ({elapsed:.1f}s)")
+                            
+                            # Delay to respect rate limits
+                            time.sleep(1)
+                            
+                        except Exception as e:
+                            logger.error(f"Error fetching token data for {whale_address[:10]}...: {e}")
+                
+                logger.info(f"Background token data fetching completed: {processed_count}/{total_whales} whales processed")
+                
+            except Exception as e:
+                logger.error(f"Background token fetching failed: {e}")
+        
+        # Start token fetching in background thread
+        token_thread = threading.Thread(target=token_fetcher, daemon=True)
+        token_thread.start()
     
     def _run_adaptive_discovery_mode(self):
         """Run adaptive percentile-based discovery mode (discovery only, no validation)"""

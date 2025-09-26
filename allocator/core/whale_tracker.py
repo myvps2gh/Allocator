@@ -344,12 +344,8 @@ class WhaleTracker:
         
         logger.info(f"Initialized whale {whale_address} metrics: risk={initial_risk:.2f}, allocation={initial_allocation:.2f} ETH, score={estimated_score:.2f}")        
         
-        # Automatically fetch token data for dashboard "Show Tokens" functionality
-        try:
-            logger.info(f"Auto-fetching token data for whale {whale_address} for dashboard")
-            self.fetch_token_data_from_moralis(whale_address)
-        except Exception as e:
-            logger.warning(f"Failed to auto-fetch token data for {whale_address}: {e}")
+        # Note: Token data fetching is now handled separately to avoid blocking the main discovery process
+        # Use --fetch-tokens command or the test_adaptive_discovery.py script to fetch token data
         
         logger.info(f"Added whale {whale_address} to tracking: {moralis_data['realized_pct']}% ROI, ${moralis_data['realized_usd']} profit")
         return True
