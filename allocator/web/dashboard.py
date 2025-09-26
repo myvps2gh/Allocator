@@ -676,7 +676,7 @@ ANALYSIS_TEMPLATE = """
                 <div>
                     <div class="whale-address">{{ whale.address }}</div>
                     <div style="font-size: 0.9em; color: #666; margin-top: 5px;">
-                        Rank #{{ loop.index }} | Copy Trading Score: {{ whale.copy_trading_score:.1f }}/100
+                        Rank #{{ loop.index }} | Copy Trading Score: {{ "%.1f"|format(whale.copy_trading_score) }}/100
                     </div>
                 </div>
                 <button class="copy-btn" onclick="copyAddress('{{ whale.address }}')">Copy Address</button>
@@ -685,23 +685,23 @@ ANALYSIS_TEMPLATE = """
             <div class="metrics-grid">
                 <div class="metric">
                     <div class="metric-label">Score v2.0</div>
-                    <div class="metric-value">{{ whale.score_v2:.2f }}</div>
+                    <div class="metric-value">{{ "%.2f"|format(whale.score_v2) }}</div>
                 </div>
                 <div class="metric">
                     <div class="metric-label">ROI</div>
-                    <div class="metric-value">{{ whale.roi_pct:.1f }}%</div>
+                    <div class="metric-value">{{ "%.1f"|format(whale.roi_pct) }}%</div>
                 </div>
                 <div class="metric">
                     <div class="metric-label">Profit</div>
-                    <div class="metric-value">${{ whale.profit_usd:,.0f }}</div>
+                    <div class="metric-value">${{ "{:,.0f}"|format(whale.profit_usd) }}</div>
                 </div>
                 <div class="metric">
                     <div class="metric-label">Trades</div>
-                    <div class="metric-value">{{ whale.trades:, }}</div>
+                    <div class="metric-value">{{ "{:,}"|format(whale.trades) }}</div>
                 </div>
                 <div class="metric">
                     <div class="metric-label">Win Rate</div>
-                    <div class="metric-value">{{ whale.win_rate*100:.1f }}%</div>
+                    <div class="metric-value">{{ "%.1f"|format(whale.win_rate*100) }}%</div>
                 </div>
                 <div class="metric">
                     <div class="metric-label">Tokens</div>
@@ -709,7 +709,7 @@ ANALYSIS_TEMPLATE = """
                 </div>
                 <div class="metric">
                     <div class="metric-label">Diversification</div>
-                    <div class="metric-value">{{ whale.diversification_score:.1f }}/100</div>
+                    <div class="metric-value">{{ "%.1f"|format(whale.diversification_score) }}/100</div>
                 </div>
                 <div class="metric">
                     <div class="metric-label">Risk Level</div>
