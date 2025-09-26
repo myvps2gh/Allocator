@@ -413,10 +413,20 @@ DASHBOARD_TEMPLATE = """
         let currentSort = { column: null, direction: 'asc' };
 
         function sortTable(column) {
+            console.log('=== SORTING DEBUG ===');
             console.log('Sorting by column:', column);
             
             const table = document.querySelector('table');
+            if (!table) {
+                console.error('Table not found!');
+                return;
+            }
+            
             const tbody = table.querySelector('tbody');
+            if (!tbody) {
+                console.error('Tbody not found!');
+                return;
+            }
             
             // Get all rows
             const allRows = Array.from(tbody.querySelectorAll('tr'));
@@ -426,10 +436,17 @@ DASHBOARD_TEMPLATE = """
             const whaleRows = allRows.filter(row => {
                 const hasTokensId = row.id && row.id.startsWith('tokens-');
                 const isTokenRow = row.querySelector('td[colspan]'); // Token rows have colspan
-                return !hasTokensId && !isTokenRow;
+                const isMainRow = !hasTokensId && !isTokenRow;
+                console.log('Row check:', row.id, 'hasTokensId:', hasTokensId, 'isTokenRow:', !!isTokenRow, 'isMainRow:', isMainRow);
+                return isMainRow;
             });
             
             console.log('Whale rows found:', whaleRows.length);
+            
+            if (whaleRows.length === 0) {
+                console.error('No whale rows found to sort!');
+                return;
+            }
             
             // Determine sort direction
             if (currentSort.column === column) {
@@ -438,6 +455,8 @@ DASHBOARD_TEMPLATE = """
                 currentSort.direction = 'asc';
             }
             currentSort.column = column;
+
+            console.log('Sort direction:', currentSort.direction);
 
             // Update sort indicators
             document.querySelectorAll('.sort-indicator').forEach(indicator => {
@@ -454,11 +473,14 @@ DASHBOARD_TEMPLATE = """
                 let aValue, bValue;
                 
                 // Get cell values based on column
-                const aCell = a.querySelector(`td:nth-child(${getColumnIndex(column)})`);
-                const bCell = b.querySelector(`td:nth-child(${getColumnIndex(column)})`);
+                const columnIndex = getColumnIndex(column);
+                console.log('Column index for', column, ':', columnIndex);
+                
+                const aCell = a.querySelector(`td:nth-child(${columnIndex})`);
+                const bCell = b.querySelector(`td:nth-child(${columnIndex})`);
                 
                 if (!aCell || !bCell) {
-                    console.log('Missing cells for sorting');
+                    console.log('Missing cells for sorting - aCell:', !!aCell, 'bCell:', !!bCell);
                     return 0;
                 }
                 
@@ -472,33 +494,39 @@ DASHBOARD_TEMPLATE = """
                     bValue = parseFloat(bCell.textContent.replace(/[^0-9.-]/g, '')) || 0;
                 }
                 
-                console.log('Comparing:', aValue, 'vs', bValue);
+                console.log('Comparing:', aValue, 'vs', bValue, 'direction:', currentSort.direction);
                 
                 // Handle null/undefined values
                 if (aValue === null || aValue === undefined) aValue = column === 'address' ? '' : 0;
                 if (bValue === null || bValue === undefined) bValue = column === 'address' ? '' : 0;
                 
                 // Compare values
+                let result;
                 if (column === 'address') {
-                    return currentSort.direction === 'asc' ? 
+                    result = currentSort.direction === 'asc' ? 
                         aValue.localeCompare(bValue) : 
                         bValue.localeCompare(aValue);
                 } else {
-                    return currentSort.direction === 'asc' ? 
+                    result = currentSort.direction === 'asc' ? 
                         aValue - bValue : 
                         bValue - aValue;
                 }
+                
+                console.log('Sort result:', result);
+                return result;
             });
             
             console.log('Sorting completed, rebuilding table...');
             
             // Clear tbody and re-add sorted rows
             tbody.innerHTML = '';
-            whaleRows.forEach(row => {
+            whaleRows.forEach((row, index) => {
+                console.log('Adding row', index, ':', row.querySelector('td:first-child')?.textContent?.trim());
                 tbody.appendChild(row);
             });
             
             console.log('Table rebuilt with', whaleRows.length, 'rows');
+            console.log('=== END SORTING DEBUG ===');
         }
 
         function getColumnIndex(column) {
