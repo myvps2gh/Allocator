@@ -247,15 +247,15 @@ DASHBOARD_TEMPLATE = """
             <table style="width: 100%; min-width: 1200px; border-collapse: collapse;">
                 <thead>
                     <tr style="background: #f8f9fa;">
-                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Whale Address</th>
-                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Cumulative PnL</th>
-                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Risk Multiplier</th>
-                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Allocation Size</th>
-                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Trade Count</th>
-                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Score v2.0</th>
-                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Win Rate</th>
-                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; width: 100px;">Moralis ROI%</th>
-                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; width: 120px;">Moralis PnL $</th>
+                        <th class="sortable" data-column="address" style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; cursor: pointer; user-select: none;">Whale Address <span class="sort-indicator">↕</span></th>
+                        <th class="sortable" data-column="pnl" style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; cursor: pointer; user-select: none;">Cumulative PnL <span class="sort-indicator">↕</span></th>
+                        <th class="sortable" data-column="risk" style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; cursor: pointer; user-select: none;">Risk Multiplier <span class="sort-indicator">↕</span></th>
+                        <th class="sortable" data-column="allocation" style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; cursor: pointer; user-select: none;">Allocation Size <span class="sort-indicator">↕</span></th>
+                        <th class="sortable" data-column="count" style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; cursor: pointer; user-select: none;">Trade Count <span class="sort-indicator">↕</span></th>
+                        <th class="sortable" data-column="score" style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; cursor: pointer; user-select: none;">Score v2.0 <span class="sort-indicator">↕</span></th>
+                        <th class="sortable" data-column="winrate" style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; cursor: pointer; user-select: none;">Win Rate <span class="sort-indicator">↕</span></th>
+                        <th class="sortable" data-column="moralis_roi" style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; width: 100px; cursor: pointer; user-select: none;">Moralis ROI% <span class="sort-indicator">↕</span></th>
+                        <th class="sortable" data-column="moralis_profit_usd" style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; width: 120px; cursor: pointer; user-select: none;">Moralis PnL $ <span class="sort-indicator">↕</span></th>
                         <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; width: 80px;">Tokens</th>
                         <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; width: 100px;">Actions</th>
                     </tr>
@@ -408,6 +408,106 @@ DASHBOARD_TEMPLATE = """
                 }
             }
         }
+
+        // Table sorting functionality
+        let currentSort = { column: null, direction: 'asc' };
+
+        function sortTable(column) {
+            const table = document.querySelector('table');
+            const tbody = table.querySelector('tbody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            
+            // Determine sort direction
+            if (currentSort.column === column) {
+                currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSort.direction = 'asc';
+            }
+            currentSort.column = column;
+
+            // Update sort indicators
+            document.querySelectorAll('.sort-indicator').forEach(indicator => {
+                indicator.textContent = '↕';
+            });
+            
+            const currentHeader = document.querySelector(`th[data-column="${column}"] .sort-indicator`);
+            if (currentHeader) {
+                currentHeader.textContent = currentSort.direction === 'asc' ? '↑' : '↓';
+            }
+
+            // Sort rows
+            rows.sort((a, b) => {
+                let aValue, bValue;
+                
+                // Get cell values based on column
+                const aCell = a.querySelector(`td:nth-child(${getColumnIndex(column)})`);
+                const bCell = b.querySelector(`td:nth-child(${getColumnIndex(column)})`);
+                
+                if (!aCell || !bCell) return 0;
+                
+                // Extract numeric values for sorting
+                if (column === 'address') {
+                    aValue = aCell.textContent.trim();
+                    bValue = bCell.textContent.trim();
+                } else {
+                    // Extract numeric value from cell content
+                    aValue = parseFloat(aCell.textContent.replace(/[^0-9.-]/g, '')) || 0;
+                    bValue = parseFloat(bCell.textContent.replace(/[^0-9.-]/g, '')) || 0;
+                }
+                
+                // Handle null/undefined values
+                if (aValue === null || aValue === undefined) aValue = column === 'address' ? '' : 0;
+                if (bValue === null || bValue === undefined) bValue = column === 'address' ? '' : 0;
+                
+                // Compare values
+                if (column === 'address') {
+                    return currentSort.direction === 'asc' ? 
+                        aValue.localeCompare(bValue) : 
+                        bValue.localeCompare(aValue);
+                } else {
+                    return currentSort.direction === 'asc' ? 
+                        aValue - bValue : 
+                        bValue - aValue;
+                }
+            });
+            
+            // Re-append sorted rows
+            rows.forEach(row => tbody.appendChild(row));
+        }
+
+        function getColumnIndex(column) {
+            const columnMap = {
+                'address': 1,
+                'pnl': 2,
+                'risk': 3,
+                'allocation': 4,
+                'count': 5,
+                'score': 6,
+                'winrate': 7,
+                'moralis_roi': 8,
+                'moralis_profit_usd': 9
+            };
+            return columnMap[column] || 1;
+        }
+
+        // Add click event listeners to sortable headers
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('.sortable').forEach(header => {
+                header.addEventListener('click', function() {
+                    const column = this.getAttribute('data-column');
+                    sortTable(column);
+                });
+                
+                // Add hover effect
+                header.addEventListener('mouseenter', function() {
+                    this.style.backgroundColor = '#e9ecef';
+                });
+                
+                header.addEventListener('mouseleave', function() {
+                    this.style.backgroundColor = '';
+                });
+            });
+        });
     </script>
 </body>
 </html>
