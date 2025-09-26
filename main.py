@@ -713,12 +713,6 @@ def main():
                        help="Process adaptive candidates (validate with Moralis and fetch tokens)")
     parser.add_argument("--show-adaptive", action="store_true",
                        help="Show status of adaptive candidates")
-    parser.add_argument("--show-discarded", action="store_true",
-                       help="Show all discarded whales")
-    parser.add_argument("--rescan-whale", type=str, metavar="ADDRESS",
-                       help="Remove discarded status from a whale to allow rescanning")
-    parser.add_argument("--top-whales", type=int, metavar="N", default=10,
-                       help="Show top N whales for copying (default: 10)")
     
     args = parser.parse_args()
     
@@ -954,86 +948,6 @@ def main():
             
             return
         
-        # Handle show discarded whales command
-        if args.show_discarded:
-            logger.info("Discarded Whales:")
-            
-            discarded_whales = allocator.db_manager.get_discarded_whales()
-            if not discarded_whales:
-                logger.info("  No discarded whales found")
-                return
-            
-            logger.info(f"  Found {len(discarded_whales)} discarded whales:")
-            logger.info("  Address | Score | Trades | ROI% | Discarded Time")
-            logger.info("  " + "-" * 80)
-            
-            for whale_data in discarded_whales:
-                address = whale_data[0]
-                score = whale_data[9] if len(whale_data) > 9 else 0
-                trades = whale_data[3] if len(whale_data) > 3 else 0
-                roi = whale_data[1] if len(whale_data) > 1 else 0
-                discarded_time = whale_data[11] if len(whale_data) > 11 else "Unknown"
-                
-                # Convert timestamp to readable format
-                if discarded_time and discarded_time != "Unknown":
-                    try:
-                        import datetime
-                        discarded_time = datetime.datetime.fromtimestamp(int(discarded_time)).strftime('%Y-%m-%d %H:%M:%S')
-                    except:
-                        pass
-                
-                logger.info(f"  {address[:10]}... | {score:.2f} | {trades} | {roi:.2f}% | {discarded_time}")
-            
-            return
-        
-        # Handle rescan whale command
-        if args.rescan_whale:
-            whale_address = args.rescan_whale
-            logger.info(f"Removing discarded status from whale {whale_address}...")
-            
-            success = allocator.db_manager.rescan_whale(whale_address)
-            if success:
-                logger.info(f"Successfully removed discarded status from {whale_address}")
-                logger.info("Whale is now ready for rescanning")
-            else:
-                logger.error(f"Failed to remove discarded status from {whale_address}")
-            
-            return
-        
-        # Handle top whales command
-        if args.top_whales:
-            logger.info(f"Top {args.top_whales} Whales for Copying:")
-            
-            # Get top whales sorted by score
-            top_whales = allocator.db_manager.get_all_whales_sorted_by_score()[:args.top_whales]
-            
-            if not top_whales:
-                logger.info("  No whales found")
-                return
-            
-            logger.info("  Rank | Address | Score | Trades | Tokens | ROI% | Win Rate | Risk")
-            logger.info("  " + "-" * 100)
-            
-            for i, whale_data in enumerate(top_whales, 1):
-                address = whale_data[0]
-                score = whale_data[9] if len(whale_data) > 9 else 0
-                trades = whale_data[3] if len(whale_data) > 3 else 0
-                roi = whale_data[1] if len(whale_data) > 1 else 0
-                win_rate = whale_data[10] if len(whale_data) > 10 else 0
-                risk = whale_data[7] if len(whale_data) > 7 else 1.0
-                
-                # Get token count
-                token_breakdown = allocator.db_manager.get_whale_token_breakdown(address)
-                token_count = len([t for t in token_breakdown if t[0] != "PROCESSED"])
-                
-                logger.info(f"  {i:2d}   | {address[:10]}... | {score:6.2f} | {trades:6d} | {token_count:6d} | {roi:5.1f}% | {win_rate*100:7.1f}% | {risk:4.2f}")
-            
-            logger.info(f"\n💡 Copy any address above to start following that whale!")
-            logger.info(f"💡 Higher score = better overall performance")
-            logger.info(f"💡 More trades + tokens = more reliable data")
-            logger.info(f"💡 Lower risk multiplier = more conservative")
-            
-            return
         
         # Handle token data fetching command
         if args.fetch_tokens:
