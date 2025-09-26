@@ -232,6 +232,16 @@ class DatabaseManager:
                 logger.error(f"Database error getting all whales: {e}")
                 return []
     
+    def get_all_whales_sorted_by_score(self) -> List[Tuple]:
+        """Get all whales from database sorted by Score v2.0 (descending)"""
+        with self.lock:
+            try:
+                cursor = self.conn.execute("SELECT * FROM whales ORDER BY score DESC")
+                return cursor.fetchall()
+            except sqlite3.Error as e:
+                logger.error(f"Database error getting whales sorted by score: {e}")
+                return []
+    
     def update_whale_performance(self, addr: str, cumulative_pnl: float = None, 
                                 risk_multiplier: float = None, allocation_size: float = None,
                                 score: float = None, win_rate: float = None) -> bool:

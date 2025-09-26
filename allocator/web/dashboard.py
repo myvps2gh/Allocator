@@ -247,15 +247,15 @@ DASHBOARD_TEMPLATE = """
             <table id="whale-performance-table" style="width: 100%; min-width: 1200px; border-collapse: collapse;">
                 <thead>
                     <tr style="background: #f8f9fa;">
-                        <th class="sortable" data-column="address" style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; cursor: pointer; user-select: none;">Whale Address <span class="sort-indicator">↕</span></th>
-                        <th class="sortable" data-column="pnl" style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; cursor: pointer; user-select: none;">Cumulative PnL <span class="sort-indicator">↕</span></th>
-                        <th class="sortable" data-column="risk" style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; cursor: pointer; user-select: none;">Risk Multiplier <span class="sort-indicator">↕</span></th>
-                        <th class="sortable" data-column="allocation" style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; cursor: pointer; user-select: none;">Allocation Size <span class="sort-indicator">↕</span></th>
-                        <th class="sortable" data-column="count" style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; cursor: pointer; user-select: none;">Trade Count <span class="sort-indicator">↕</span></th>
-                        <th class="sortable" data-column="score" style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; cursor: pointer; user-select: none;">Score v2.0 <span class="sort-indicator">↕</span></th>
-                        <th class="sortable" data-column="winrate" style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; cursor: pointer; user-select: none;">Win Rate <span class="sort-indicator">↕</span></th>
-                        <th class="sortable" data-column="moralis_roi" style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; width: 100px; cursor: pointer; user-select: none;">Moralis ROI% <span class="sort-indicator">↕</span></th>
-                        <th class="sortable" data-column="moralis_profit_usd" style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; width: 120px; cursor: pointer; user-select: none;">Moralis PnL $ <span class="sort-indicator">↕</span></th>
+                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Whale Address</th>
+                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Cumulative PnL</th>
+                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Risk Multiplier</th>
+                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Allocation Size</th>
+                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Trade Count</th>
+                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Score v2.0 ↓</th>
+                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap;">Win Rate</th>
+                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; width: 100px;">Moralis ROI%</th>
+                        <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; width: 120px;">Moralis PnL $</th>
                         <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; width: 80px;">Tokens</th>
                         <th style="padding: 15px; text-align: left; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; white-space: nowrap; width: 100px;">Actions</th>
                     </tr>
@@ -409,166 +409,7 @@ DASHBOARD_TEMPLATE = """
             }
         }
 
-        // Table sorting functionality
-        let currentSort = { column: null, direction: 'asc' };
-
-        function sortTable(column) {
-            console.log('=== SORTING DEBUG ===');
-            console.log('Sorting by column:', column);
-            
-            const table = document.getElementById('whale-performance-table');
-            if (!table) {
-                console.error('Whale Performance table not found!');
-                return;
-            }
-            
-            const tbody = table.querySelector('tbody');
-            if (!tbody) {
-                console.error('Tbody not found!');
-                return;
-            }
-            
-            // Get all rows
-            const allRows = Array.from(tbody.querySelectorAll('tr'));
-            console.log('Total rows found:', allRows.length);
-            
-            // Get only main whale rows (exclude token breakdown rows)
-            const whaleRows = allRows.filter(row => {
-                const hasTokensId = row.id && row.id.startsWith('tokens-');
-                const isTokenRow = row.querySelector('td[colspan]'); // Token rows have colspan
-                const isMainRow = !hasTokensId && !isTokenRow;
-                console.log('Row check:', row.id, 'hasTokensId:', hasTokensId, 'isTokenRow:', !!isTokenRow, 'isMainRow:', isMainRow);
-                return isMainRow;
-            });
-            
-            console.log('Whale rows found:', whaleRows.length);
-            
-            if (whaleRows.length === 0) {
-                console.error('No whale rows found to sort!');
-                return;
-            }
-            
-            // Determine sort direction
-            if (currentSort.column === column) {
-                currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
-            } else {
-                currentSort.direction = 'asc';
-            }
-            currentSort.column = column;
-
-            console.log('Sort direction:', currentSort.direction);
-
-            // Update sort indicators
-            document.querySelectorAll('.sort-indicator').forEach(indicator => {
-                indicator.textContent = '↕';
-            });
-            
-            const currentHeader = document.querySelector(`th[data-column="${column}"] .sort-indicator`);
-            if (currentHeader) {
-                currentHeader.textContent = currentSort.direction === 'asc' ? '↑' : '↓';
-            }
-
-            // Sort whale rows
-            whaleRows.sort((a, b) => {
-                let aValue, bValue;
-                
-                // Get cell values based on column
-                const columnIndex = getColumnIndex(column);
-                console.log('Column index for', column, ':', columnIndex);
-                
-                const aCell = a.querySelector(`td:nth-child(${columnIndex})`);
-                const bCell = b.querySelector(`td:nth-child(${columnIndex})`);
-                
-                if (!aCell || !bCell) {
-                    console.log('Missing cells for sorting - aCell:', !!aCell, 'bCell:', !!bCell);
-                    return 0;
-                }
-                
-                // Extract numeric values for sorting
-                if (column === 'address') {
-                    aValue = aCell.textContent.trim();
-                    bValue = bCell.textContent.trim();
-                } else {
-                    // Extract numeric value from cell content
-                    aValue = parseFloat(aCell.textContent.replace(/[^0-9.-]/g, '')) || 0;
-                    bValue = parseFloat(bCell.textContent.replace(/[^0-9.-]/g, '')) || 0;
-                }
-                
-                console.log('Comparing:', aValue, 'vs', bValue, 'direction:', currentSort.direction);
-                
-                // Handle null/undefined values
-                if (aValue === null || aValue === undefined) aValue = column === 'address' ? '' : 0;
-                if (bValue === null || bValue === undefined) bValue = column === 'address' ? '' : 0;
-                
-                // Compare values
-                let result;
-                if (column === 'address') {
-                    result = currentSort.direction === 'asc' ? 
-                        aValue.localeCompare(bValue) : 
-                        bValue.localeCompare(aValue);
-                } else {
-                    result = currentSort.direction === 'asc' ? 
-                        aValue - bValue : 
-                        bValue - aValue;
-                }
-                
-                console.log('Sort result:', result);
-                return result;
-            });
-            
-            console.log('Sorting completed, rebuilding table...');
-            
-            // Clear tbody and re-add sorted rows
-            tbody.innerHTML = '';
-            whaleRows.forEach((row, index) => {
-                console.log('Adding row', index, ':', row.querySelector('td:first-child')?.textContent?.trim());
-                tbody.appendChild(row);
-            });
-            
-            console.log('Table rebuilt with', whaleRows.length, 'rows');
-            console.log('=== END SORTING DEBUG ===');
-        }
-
-        function getColumnIndex(column) {
-            const columnMap = {
-                'address': 1,
-                'pnl': 2,
-                'risk': 3,
-                'allocation': 4,
-                'count': 5,
-                'score': 6,
-                'winrate': 7,
-                'moralis_roi': 8,
-                'moralis_profit_usd': 9
-            };
-            return columnMap[column] || 1;
-        }
-
-        // Add click event listeners to sortable headers
-        document.addEventListener('DOMContentLoaded', function() {
-            document.querySelectorAll('.sortable').forEach(header => {
-                header.addEventListener('click', function(event) {
-                    event.stopPropagation(); // Prevent event bubbling
-                    event.preventDefault(); // Prevent default behavior
-                    const column = this.getAttribute('data-column');
-                    sortTable(column);
-                });
-                
-                // Add hover effect
-                header.addEventListener('mouseenter', function() {
-                    this.style.backgroundColor = '#e9ecef';
-                });
-                
-                header.addEventListener('mouseleave', function() {
-                    this.style.backgroundColor = '';
-                });
-            });
-            
-            // Auto-sort by Score v2.0 in descending order on page load
-            // setTimeout(() => {
-            //     sortTable('score');
-            // }, 100);
-        });
+        // Table sorting removed - now using database-level sorting
     </script>
 </body>
 </html>
@@ -594,9 +435,9 @@ def create_app(whale_tracker, risk_manager, db_manager, mode: str = "LIVE") -> F
         print(f"Headers: {dict(request.headers)}")
         print(f"=== END REQUEST [{request_time}] ===")
         try:
-            # Get whale data from database
+            # Get whale data from database, sorted by Score v2.0 (descending)
             whale_data = []
-            db_whales = db_manager.get_all_whales()
+            db_whales = db_manager.get_all_whales_sorted_by_score()
             
             for whale_row in db_whales:
                 # Database columns: 0=address, 1=moralis_roi_pct, 2=roi_usd, 3=trades, 4=cumulative_pnl, 
