@@ -227,7 +227,7 @@ DASHBOARD_TEMPLATE = """
                         <span class="status-indicator {{ 'status-online' if discovery.status == 'running' else 'status-idle' if discovery.status == 'completed' else 'status-offline' }}"></span>
                         {{ discovery.status.title() }}
                     </td>
-                    <td style="padding: 15px; border-bottom: 1px solid #dee2e6;">{{ '{:,}'.format(int(discovery.blocks_back)) if discovery.blocks_back else 'N/A' }}</td>
+                    <td style="padding: 15px; border-bottom: 1px solid #dee2e6;">{{ '{:,}'.format(discovery.blocks_back|int) if discovery.blocks_back else 'N/A' }}</td>
                     <td style="padding: 15px; border-bottom: 1px solid #dee2e6;">{{ discovery.min_trades }}</td>
                     <td style="padding: 15px; border-bottom: 1px solid #dee2e6;">{{ discovery.min_pnl_threshold }} ETH</td>
                     <td style="padding: 15px; border-bottom: 1px solid #dee2e6;" class="neutral">{{ discovery.candidates_found if discovery.candidates_found is not none else 'N/A' }}</td>
