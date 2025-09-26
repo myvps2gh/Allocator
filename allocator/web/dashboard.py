@@ -413,12 +413,23 @@ DASHBOARD_TEMPLATE = """
         let currentSort = { column: null, direction: 'asc' };
 
         function sortTable(column) {
+            console.log('Sorting by column:', column);
+            
             const table = document.querySelector('table');
             const tbody = table.querySelector('tbody');
             
-            // Get only main whale rows (exclude token breakdown rows)
+            // Get all rows
             const allRows = Array.from(tbody.querySelectorAll('tr'));
-            const whaleRows = allRows.filter(row => !row.id.startsWith('tokens-'));
+            console.log('Total rows found:', allRows.length);
+            
+            // Get only main whale rows (exclude token breakdown rows)
+            const whaleRows = allRows.filter(row => {
+                const hasTokensId = row.id && row.id.startsWith('tokens-');
+                const isTokenRow = row.querySelector('td[colspan]'); // Token rows have colspan
+                return !hasTokensId && !isTokenRow;
+            });
+            
+            console.log('Whale rows found:', whaleRows.length);
             
             // Determine sort direction
             if (currentSort.column === column) {
@@ -446,7 +457,10 @@ DASHBOARD_TEMPLATE = """
                 const aCell = a.querySelector(`td:nth-child(${getColumnIndex(column)})`);
                 const bCell = b.querySelector(`td:nth-child(${getColumnIndex(column)})`);
                 
-                if (!aCell || !bCell) return 0;
+                if (!aCell || !bCell) {
+                    console.log('Missing cells for sorting');
+                    return 0;
+                }
                 
                 // Extract numeric values for sorting
                 if (column === 'address') {
@@ -457,6 +471,8 @@ DASHBOARD_TEMPLATE = """
                     aValue = parseFloat(aCell.textContent.replace(/[^0-9.-]/g, '')) || 0;
                     bValue = parseFloat(bCell.textContent.replace(/[^0-9.-]/g, '')) || 0;
                 }
+                
+                console.log('Comparing:', aValue, 'vs', bValue);
                 
                 // Handle null/undefined values
                 if (aValue === null || aValue === undefined) aValue = column === 'address' ? '' : 0;
@@ -474,23 +490,15 @@ DASHBOARD_TEMPLATE = """
                 }
             });
             
-            // Rebuild tbody with sorted whale rows and their token rows
-            const newTbody = document.createElement('tbody');
+            console.log('Sorting completed, rebuilding table...');
             
-            whaleRows.forEach(whaleRow => {
-                // Add the whale row
-                newTbody.appendChild(whaleRow);
-                
-                // Find and add its corresponding token row
-                const whaleAddress = whaleRow.querySelector('td:first-child').textContent.trim();
-                const tokenRow = document.getElementById('tokens-' + whaleAddress);
-                if (tokenRow) {
-                    newTbody.appendChild(tokenRow);
-                }
+            // Clear tbody and re-add sorted rows
+            tbody.innerHTML = '';
+            whaleRows.forEach(row => {
+                tbody.appendChild(row);
             });
             
-            // Replace the old tbody
-            tbody.parentNode.replaceChild(newTbody, tbody);
+            console.log('Table rebuilt with', whaleRows.length, 'rows');
         }
 
         function getColumnIndex(column) {
@@ -525,6 +533,11 @@ DASHBOARD_TEMPLATE = """
                     this.style.backgroundColor = '';
                 });
             });
+            
+            // Auto-sort by Score v2.0 in descending order on page load
+            setTimeout(() => {
+                sortTable('score');
+            }, 100);
         });
     </script>
 </body>
