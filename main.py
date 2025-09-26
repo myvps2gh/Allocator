@@ -507,7 +507,7 @@ class AllocatorAI:
             candidates = result.get("candidates", [])
             logger.info(f"Found {len(candidates)} adaptive candidates")
             
-            # Store candidates in database
+            # Store candidates in database and get candidates to process
             new_candidates = []
             for candidate in candidates[:20]:  # Limit to 20 candidates for performance
                 if self._store_adaptive_candidate(candidate, result):
@@ -515,14 +515,36 @@ class AllocatorAI:
             
             logger.info(f"Stored {len(new_candidates)} new candidates in database")
             
+            # Get candidates to process (both new and existing unvalidated ones)
+            candidates_to_process = []
+            
+            # Add new candidates
+            candidates_to_process.extend(new_candidates)
+            
+            # Add existing unvalidated candidates if we have room
+            if len(candidates_to_process) < 20:
+                existing_unvalidated = self.db_manager.conn.execute("""
+                    SELECT address FROM adaptive_candidates 
+                    WHERE moralis_validated = FALSE 
+                    AND status IN ('discovered', 'failed_moralis', 'error')
+                    ORDER BY discovered_at 
+                    LIMIT ?
+                """, (20 - len(candidates_to_process),)).fetchall()
+                
+                for (address,) in existing_unvalidated:
+                    if address not in candidates_to_process:
+                        candidates_to_process.append(address)
+            
+            logger.info(f"Processing {len(candidates_to_process)} candidates (new: {len(new_candidates)}, existing: {len(candidates_to_process) - len(new_candidates)})")
+            
             # Validate candidates with Moralis (like test_adaptive_discovery.py)
             validated_whales = []
-            if new_candidates and self.mode != "DRY_RUN_WO_MOR":
-                logger.info(f"Validating {len(new_candidates)} candidates with Moralis...")
+            if candidates_to_process and self.mode != "DRY_RUN_WO_MOR":
+                logger.info(f"Validating {len(candidates_to_process)} candidates with Moralis...")
                 
-                for i, candidate in enumerate(new_candidates):
+                for i, candidate in enumerate(candidates_to_process):
                     try:
-                        logger.info(f"Validating candidate {i+1}/{len(new_candidates)}: {candidate[:10]}...")
+                        logger.info(f"Validating candidate {i+1}/{len(candidates_to_process)}: {candidate[:10]}...")
                         candidate_start_time = time.time()
                         
                         # Fetch Moralis data
@@ -580,7 +602,7 @@ class AllocatorAI:
                 logger.info(f"Validated {len(validated_whales)} candidates successfully")
             elif self.mode == "DRY_RUN_WO_MOR":
                 logger.info("Mode adaptive_percentile: Skipping Moralis validation (DRY_RUN_WO_MOR)")
-                validated_whales = new_candidates
+                validated_whales = candidates_to_process
             
             # Log detailed summary like the test script
             if validated_whales:
