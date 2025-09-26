@@ -547,7 +547,9 @@ DASHBOARD_TEMPLATE = """
         // Add click event listeners to sortable headers
         document.addEventListener('DOMContentLoaded', function() {
             document.querySelectorAll('.sortable').forEach(header => {
-                header.addEventListener('click', function() {
+                header.addEventListener('click', function(event) {
+                    event.stopPropagation(); // Prevent event bubbling
+                    event.preventDefault(); // Prevent default behavior
                     const column = this.getAttribute('data-column');
                     sortTable(column);
                 });
