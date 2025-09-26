@@ -353,6 +353,18 @@ class AllocatorAI:
                             whale_preview = [whale[:10] + "..." for whale in whales[:3]]
                             logger.info(f"Mode {mode} result: {len(whales)} whales {whale_preview}")
                     
+                    # Fetch token data for newly discovered whales
+                    if total_validated > 0:
+                        logger.info(f"Fetching token data for {total_validated} newly discovered whales...")
+                        for mode, whales in all_validated_whales.items():
+                            for whale_address in whales:
+                                try:
+                                    self.whale_tracker.fetch_token_data_from_moralis(whale_address)
+                                    time.sleep(1)  # Small delay to respect rate limits
+                                except Exception as e:
+                                    logger.warning(f"Failed to fetch token data for {whale_address}: {e}")
+                        logger.info("Token data fetching completed")
+                    
                     # Wait before next discovery round
                     refresh_interval = self.config.discovery.refresh_interval
                     logger.info(f"Discovery round completed. Waiting {refresh_interval} seconds before next round...")
