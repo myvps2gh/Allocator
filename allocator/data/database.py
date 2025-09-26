@@ -171,7 +171,12 @@ class DatabaseManager:
                 # Check if whale already exists to preserve bootstrap_time
                 logger.info(f"save_whale: Checking if whale exists for {addr[:10]}...")
                 check_start_time = time.time()
-                existing_whale = self.get_whale(addr_lower)
+                # Use direct query instead of get_whale to avoid deadlock (we already have the lock)
+                cursor = self.conn.execute(
+                    "SELECT * FROM whales WHERE address=?", 
+                    (addr_lower,)
+                )
+                existing_whale = cursor.fetchone()
                 check_elapsed = time.time() - check_start_time
                 logger.info(f"save_whale: Whale existence check completed in {check_elapsed:.1f}s for {addr[:10]}")
                 
