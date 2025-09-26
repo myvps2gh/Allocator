@@ -7,6 +7,7 @@ import time
 from flask import Flask, render_template_string, jsonify, request, make_response
 from typing import Dict, Any, List
 from decimal import Decimal
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -180,6 +181,7 @@ DASHBOARD_TEMPLATE = """
         <h1>🐋 Allocator AI</h1>
         <div>
             <span class="mode-badge">{{ mode }} MODE</span>
+            <a href="/analysis" style="background: #28a745; color: white; padding: 8px 16px; text-decoration: none; border-radius: 4px; margin-right: 10px;">📊 Whale Analysis</a>
             <button class="refresh-btn" onclick="location.reload()">Refresh</button>
         </div>
     </div>
@@ -431,6 +433,340 @@ DASHBOARD_TEMPLATE = """
         }
 
         // Table sorting removed - using database-level sorting by Score v2.0
+    </script>
+</body>
+</html>
+"""
+
+# Analysis HTML template
+ANALYSIS_TEMPLATE = """
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Whale Copy Trading Analysis - Allocator AI</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f8f9fa;
+            color: #333;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+        }
+        .header p {
+            margin: 10px 0 0 0;
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        .nav {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .nav a {
+            display: inline-block;
+            background: #007bff;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 5px;
+            margin: 0 10px;
+        }
+        .nav a:hover {
+            background: #0056b3;
+        }
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .summary-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .summary-card h3 {
+            margin: 0 0 10px 0;
+            color: #667eea;
+        }
+        .summary-card .number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #333;
+        }
+        .whale-card {
+            background: white;
+            border-radius: 10px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            border-left: 5px solid #ddd;
+        }
+        .whale-card.excellent { border-left-color: #28a745; }
+        .whale-card.good { border-left-color: #17a2b8; }
+        .whale-card.fair { border-left-color: #ffc107; }
+        .whale-card.poor { border-left-color: #fd7e14; }
+        .whale-card.avoid { border-left-color: #dc3545; }
+        .whale-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .whale-address {
+            font-family: 'Courier New', monospace;
+            font-size: 1.1em;
+            font-weight: bold;
+            color: #333;
+        }
+        .copy-btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+        .copy-btn:hover {
+            background: #0056b3;
+        }
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .metric {
+            text-align: center;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+        .metric-label {
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        .metric-value {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #333;
+        }
+        .recommendation {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+        }
+        .recommendation.excellent { background: #d4edda; color: #155724; }
+        .recommendation.good { background: #d1ecf1; color: #0c5460; }
+        .recommendation.fair { background: #fff3cd; color: #856404; }
+        .recommendation.poor { background: #f8d7da; color: #721c24; }
+        .recommendation.avoid { background: #f5c6cb; color: #721c24; }
+        .reasons {
+            margin-top: 15px;
+        }
+        .reasons h4 {
+            margin: 0 0 10px 0;
+            color: #333;
+        }
+        .reasons ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+        .reasons li {
+            margin-bottom: 5px;
+        }
+        .token-breakdown {
+            margin-top: 20px;
+        }
+        .token-breakdown h4 {
+            margin: 0 0 10px 0;
+            color: #333;
+        }
+        .token-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .token {
+            background: #e9ecef;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 0.9em;
+        }
+        .token.positive { background: #d4edda; color: #155724; }
+        .token.negative { background: #f8d7da; color: #721c24; }
+        .risk-indicator {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 0.8em;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .risk-low { background: #d4edda; color: #155724; }
+        .risk-medium { background: #fff3cd; color: #856404; }
+        .risk-high { background: #f8d7da; color: #721c24; }
+        .risk-very-high { background: #f5c6cb; color: #721c24; }
+        .footer {
+            text-align: center;
+            margin-top: 40px;
+            padding: 20px;
+            color: #666;
+            border-top: 1px solid #dee2e6;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🐋 Whale Copy Trading Analysis</h1>
+        <p>Generated on {{ datetime.now().strftime('%Y-%m-%d %H:%M:%S') }} | Mode: {{ mode }}</p>
+    </div>
+    
+    <div class="nav">
+        <a href="/">← Back to Dashboard</a>
+        <a href="/analysis">Refresh Analysis</a>
+    </div>
+    
+    <div class="summary">
+        <div class="summary-card">
+            <h3>Total Whales</h3>
+            <div class="number">{{ total_whales }}</div>
+        </div>
+        <div class="summary-card">
+            <h3>Excellent</h3>
+            <div class="number">{{ excellent_count }}</div>
+        </div>
+        <div class="summary-card">
+            <h3>Good</h3>
+            <div class="number">{{ good_count }}</div>
+        </div>
+        <div class="summary-card">
+            <h3>Fair</h3>
+            <div class="number">{{ fair_count }}</div>
+        </div>
+        <div class="summary-card">
+            <h3>Poor/Avoid</h3>
+            <div class="number">{{ poor_count }}</div>
+        </div>
+    </div>
+    
+    <div class="whales">
+        {% for whale in analyses %}
+        <div class="whale-card {{ whale.recommendation.lower() }}">
+            <div class="whale-header">
+                <div>
+                    <div class="whale-address">{{ whale.address }}</div>
+                    <div style="font-size: 0.9em; color: #666; margin-top: 5px;">
+                        Rank #{{ loop.index }} | Copy Trading Score: {{ whale.copy_trading_score:.1f }}/100
+                    </div>
+                </div>
+                <button class="copy-btn" onclick="copyAddress('{{ whale.address }}')">Copy Address</button>
+            </div>
+            
+            <div class="metrics-grid">
+                <div class="metric">
+                    <div class="metric-label">Score v2.0</div>
+                    <div class="metric-value">{{ whale.score_v2:.2f }}</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">ROI</div>
+                    <div class="metric-value">{{ whale.roi_pct:.1f }}%</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Profit</div>
+                    <div class="metric-value">${{ whale.profit_usd:,.0f }}</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Trades</div>
+                    <div class="metric-value">{{ whale.trades:, }}</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Win Rate</div>
+                    <div class="metric-value">{{ whale.win_rate*100:.1f }}%</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Tokens</div>
+                    <div class="metric-value">{{ whale.token_count }}</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Diversification</div>
+                    <div class="metric-value">{{ whale.diversification_score:.1f }}/100</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Risk Level</div>
+                    <div class="metric-value">
+                        <span class="risk-indicator risk-{{ whale.risk_level.lower().replace(' ', '-') }}">{{ whale.risk_level }}</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="recommendation {{ whale.recommendation.lower() }}">
+                <strong>Recommendation: {{ whale.recommendation }}</strong>
+            </div>
+            
+            <div class="reasons">
+                <h4>Analysis:</h4>
+                <ul>
+                    {% for reason in whale.reasons %}
+                    <li>{{ reason }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            
+            <div class="token-breakdown">
+                <h4>Top Tokens:</h4>
+                <div class="token-list">
+                    {% for symbol, pnl, trades in whale.token_breakdown[:5] %}
+                    {% if symbol != 'PROCESSED' %}
+                    <span class="token {{ 'positive' if pnl > 0 else 'negative' }}">{{ symbol }}: {{ pnl:.2f }} ETH ({{ trades }} trades)</span>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    
+    <div class="footer">
+        <p>Generated by Whale Analyzer - Allocator AI</p>
+        <p>Higher scores indicate better copy trading suitability</p>
+    </div>
+    
+    <script>
+        function copyAddress(address) {
+            navigator.clipboard.writeText(address).then(function() {
+                // Show feedback
+                event.target.textContent = 'Copied!';
+                event.target.style.background = '#28a745';
+                
+                setTimeout(function() {
+                    event.target.textContent = 'Copy Address';
+                    event.target.style.background = '#007bff';
+                }, 1500);
+            }).catch(function(err) {
+                console.error('Failed to copy address: ', err);
+                alert('Failed to copy address to clipboard');
+            });
+        }
     </script>
 </body>
 </html>
@@ -721,6 +1057,36 @@ def create_app(whale_tracker, risk_manager, db_manager, mode: str = "LIVE") -> F
         """Favicon handler to prevent 404s"""
         print("Favicon request intercepted")
         return "", 204
+    
+    @app.route("/analysis")
+    def whale_analysis():
+        """Whale copy trading analysis page"""
+        try:
+            # Import the analyzer
+            from whale_analyzer import WhaleAnalyzer
+            
+            # Create analyzer and run analysis
+            analyzer = WhaleAnalyzer()
+            analyses = analyzer.analyze_all_whales()
+            
+            # Generate summary stats
+            total_whales = len(analyses)
+            excellent_count = len([w for w in analyses if w.recommendation == 'EXCELLENT'])
+            good_count = len([w for w in analyses if w.recommendation == 'GOOD'])
+            fair_count = len([w for w in analyses if w.recommendation == 'FAIR'])
+            poor_count = len([w for w in analyses if w.recommendation in ['POOR', 'AVOID']])
+            
+            return render_template_string(ANALYSIS_TEMPLATE, 
+                                       analyses=analyses,
+                                       total_whales=total_whales,
+                                       excellent_count=excellent_count,
+                                       good_count=good_count,
+                                       fair_count=fair_count,
+                                       poor_count=poor_count,
+                                       mode=mode)
+        except Exception as e:
+            logger.error(f"Error in whale analysis: {e}")
+            return f"Analysis error: {e}", 500
     
     # Add catch-all route for debugging  
     @app.route("/<path:path>")
