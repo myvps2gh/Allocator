@@ -438,10 +438,13 @@ def create_app(whale_tracker, risk_manager, db_manager, mode: str = "LIVE") -> F
             # Get whale data from database, sorted by Score v2.0 (descending)
             whale_data = []
             db_whales = db_manager.get_all_whales_sorted_by_score()
+            print(f"DEBUG: Retrieved {len(db_whales)} whales from database")
+            for i, whale in enumerate(db_whales[:3]):  # Show first 3 for debugging
+                print(f"DEBUG: Whale {i}: address={whale[0][:10]}..., score={whale[9]}")
             
             for whale_row in db_whales:
-                # Database columns: 0=address, 1=moralis_roi_pct, 2=roi_usd, 3=trades, 4=cumulative_pnl, 
-                # 5=risk_multiplier, 6=allocation_size, 7=score, 8=win_rate, 9=bootstrap_time, 10=last_refresh
+                # Database columns: 0=address, 1=moralis_roi_pct, 2=roi_usd, 3=trades, 4=bootstrap_time, 
+                # 5=last_refresh, 6=cumulative_pnl, 7=risk_multiplier, 8=allocation_size, 9=score, 10=win_rate
                 try:
                     def safe_float(value, default=0.0):
                         """Safely convert to float with default fallback"""
@@ -627,8 +630,8 @@ def create_app(whale_tracker, risk_manager, db_manager, mode: str = "LIVE") -> F
             db_whales = db_manager.get_all_whales()
             
             for whale_row in db_whales:
-                # Database columns: 0=address, 1=moralis_roi_pct, 2=roi_usd, 3=trades, 4=cumulative_pnl, 
-                # 5=risk_multiplier, 6=allocation_size, 7=score, 8=win_rate, 9=bootstrap_time, 10=last_refresh
+                # Database columns: 0=address, 1=moralis_roi_pct, 2=roi_usd, 3=trades, 4=bootstrap_time, 
+                # 5=last_refresh, 6=cumulative_pnl, 7=risk_multiplier, 8=allocation_size, 9=score, 10=win_rate
                 try:
                     def safe_float(value, default=0.0):
                         """Safely convert to float with default fallback"""
