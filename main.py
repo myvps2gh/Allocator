@@ -217,11 +217,16 @@ class AllocatorAI:
             logger.error(f"Failed to setup wallet: {e}")
             raise
     
-    def setup_monitoring(self):
+    def setup_monitoring(self, test_whales=None):
         """Setup mempool monitoring with separate WebSocket connection"""
         from allocator.utils.web3_utils import Web3Manager
         
-        tracked_whales = set(self.config.tracked_whales)
+        # Use test_whales if provided (TEST mode), otherwise use config
+        if test_whales:
+            tracked_whales = set(test_whales)
+            logger.info(f"TEST mode: Using {len(tracked_whales)} specified test whales")
+        else:
+            tracked_whales = set(self.config.tracked_whales)
         
         # Create separate WebSocket connection for mempool monitoring
         # to avoid conflicts with discovery process
@@ -620,7 +625,7 @@ class AllocatorAI:
         """Start mempool monitoring"""
         if self.mempool_watcher:
             # Determine mempool usage based on mode
-            use_mempool = self.mode in ["LIVE", "DRY_RUN", "DRY_RUN_WO_MOR", "TEST"]
+            use_mempool = self.mode in ["LIVE", "DRY_RUN", "DRY_RUN_WO_MOR"]
             self.mempool_watcher.start_watching(use_mempool=use_mempool)
             
             monitoring_type = "mempool" if use_mempool else "block"
@@ -651,7 +656,7 @@ class AllocatorAI:
         except Exception as e:
             logger.error(f"Failed to start dashboard: {e}", exc_info=True)
     
-    def run(self, mode: str = "LIVE", use_mempool: bool = True):
+    def run(self, mode: str = "LIVE", use_mempool: bool = True, test_whales=None):
         """Run the Allocator AI system"""
         self.mode = mode
         self.is_running = True
@@ -665,8 +670,8 @@ class AllocatorAI:
             else:
                 logger.info(f"Skipping wallet setup for {self.mode} mode (no wallet.json found)")
             
-            # Setup monitoring
-            self.setup_monitoring()
+            # Setup monitoring (pass test_whales for TEST mode)
+            self.setup_monitoring(test_whales=test_whales)
             
             # Start components (dashboard first, then discovery)
             self.start_dashboard()
@@ -675,9 +680,13 @@ class AllocatorAI:
             self.start_monitoring()
             logger.info("Monitoring startup completed")
             
-            logger.info("About to start discovery...")
-            self.start_discovery()
-            logger.info("Discovery startup completed")
+            # Skip discovery in TEST mode with specific whales
+            if mode == "TEST" and test_whales:
+                logger.info("TEST mode: Skipping discovery, monitoring specified whales only")
+            else:
+                logger.info("About to start discovery...")
+                self.start_discovery()
+                logger.info("Discovery startup completed")
             
             # Keep running
             logger.info("Allocator AI is running. Press Ctrl+C to stop.")
@@ -695,8 +704,8 @@ class AllocatorAI:
 def main():
     """Main entry point"""
     parser = argparse.ArgumentParser(description="Allocator AI - Whale Following Trading Bot")
-    parser.add_argument("--mode", choices=["LIVE", "DRY_RUN", "DRY_RUN_WO_MOR", "DRY_RUN_MEMPOOLHACK", "TEST"], default="TEST",
-                       help="Operation mode: LIVE (real trading), DRY_RUN (simulate with Moralis), DRY_RUN_WO_MOR (simulate without Moralis to save CU), DRY_RUN_MEMPOOLHACK (block monitoring), TEST (basic test)")
+    parser.add_argument("--mode", choices=["LIVE", "DRY_RUN", "DRY_RUN_WO_MOR", "TEST"], default="TEST",
+                       help="Operation mode: LIVE (real trading), DRY_RUN (simulate with Moralis), DRY_RUN_WO_MOR (simulate without Moralis to save CU), TEST (simulate copy trading from specific whales)")
     parser.add_argument("--config", default="config.json", help="Configuration file")
     parser.add_argument("--no-mempool", action="store_true", help="Use block monitoring instead of mempool")
     parser.add_argument("--refresh-whales", action="store_true", 
@@ -713,6 +722,8 @@ def main():
                        help="Process adaptive candidates (validate with Moralis and fetch tokens)")
     parser.add_argument("--show-adaptive", action="store_true",
                        help="Show status of adaptive candidates")
+    parser.add_argument("--test-whales", nargs="+", 
+                       help="Whale addresses to test copy trading from (TEST mode only)")
     
     args = parser.parse_args()
     
@@ -991,7 +1002,15 @@ def main():
             logger.info(f"Token data fetching completed! Processed {fetch_count} whales, got {total_tokens} total token records.")
             return
         
-        allocator.run(mode=args.mode, use_mempool=not args.no_mempool)
+        # Handle TEST mode with specific whales
+        if args.mode == "TEST" and args.test_whales:
+            logger.info(f"TEST mode: Simulating copy trading from {len(args.test_whales)} specific whales")
+            logger.info(f"Test whales: {args.test_whales}")
+            
+            # Run in TEST mode with block monitoring (more reliable for testing)
+            allocator.run(mode=args.mode, use_mempool=False, test_whales=args.test_whales)
+        else:
+            allocator.run(mode=args.mode, use_mempool=not args.no_mempool)
         
     except Exception as e:
         logger.error(f"Failed to start Allocator AI: {e}")
