@@ -312,7 +312,8 @@ DASHBOARD_TEMPLATE = """
                             {{ w.tokens|length }} tokens
                         </td>
                         <td style="padding: 15px; border-bottom: 1px solid #dee2e6; width: 100px; text-align: center;">
-                            <button style="background: #28a745; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; font-size: 12px;" onclick="toggleTokens('{{ w.address }}')">Show Tokens</button>
+                            <button style="background: #28a745; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; font-size: 12px; margin-right: 5px;" onclick="toggleTokens('{{ w.address }}')">Show Tokens</button>
+                            <button style="background: #007bff; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; font-size: 12px;" onclick="copyAddress('{{ w.address }}')">Copy</button>
                         </td>
                     </tr>
                     <!-- Token breakdown row (hidden by default) -->
@@ -408,6 +409,25 @@ DASHBOARD_TEMPLATE = """
                     button.style.background = '#28a745';
                 }
             }
+        }
+        
+        // Copy whale address to clipboard
+        function copyAddress(whaleAddress) {
+            navigator.clipboard.writeText(whaleAddress).then(function() {
+                // Show feedback
+                const button = document.querySelector(`button[onclick="copyAddress('${whaleAddress}')"]`);
+                const originalText = button.textContent;
+                button.textContent = 'Copied!';
+                button.style.background = '#28a745';
+                
+                setTimeout(function() {
+                    button.textContent = originalText;
+                    button.style.background = '#007bff';
+                }, 1500);
+            }).catch(function(err) {
+                console.error('Failed to copy address: ', err);
+                alert('Failed to copy address to clipboard');
+            });
         }
 
         // Table sorting removed - using database-level sorting by Score v2.0
