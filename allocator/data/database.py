@@ -169,11 +169,17 @@ class DatabaseManager:
                 current_time = int(time.time())
                 
                 # Check if whale already exists to preserve bootstrap_time
+                logger.info(f"save_whale: Checking if whale exists for {addr[:10]}...")
+                check_start_time = time.time()
                 existing_whale = self.get_whale(addr_lower)
+                check_elapsed = time.time() - check_start_time
+                logger.info(f"save_whale: Whale existence check completed in {check_elapsed:.1f}s for {addr[:10]}")
                 
                 if existing_whale:
                     # Update existing whale, preserve bootstrap_time
                     bootstrap_time = existing_whale[9]  # bootstrap_time is at index 9
+                    logger.info(f"save_whale: Updating existing whale for {addr[:10]}...")
+                    update_start_time = time.time()
                     self.conn.execute("""
                         UPDATE whales 
                         SET moralis_roi_pct=?, roi_usd=?, trades=?, cumulative_pnl=?, 
@@ -182,8 +188,12 @@ class DatabaseManager:
                     """, (float(roi_pct), float(usd), int(trades), float(cumulative_pnl), 
                           float(risk_multiplier), float(allocation_size), float(score), 
                           float(win_rate), current_time, addr_lower))
+                    update_elapsed = time.time() - update_start_time
+                    logger.info(f"save_whale: UPDATE completed in {update_elapsed:.1f}s for {addr[:10]}")
                 else:
                     # Insert new whale with current time as bootstrap_time
+                    logger.info(f"save_whale: Inserting new whale for {addr[:10]}...")
+                    insert_start_time = time.time()
                     self.conn.execute("""
                         INSERT INTO whales 
                         (address, moralis_roi_pct, roi_usd, trades, cumulative_pnl, 
@@ -192,8 +202,14 @@ class DatabaseManager:
                     """, (addr_lower, float(roi_pct), float(usd), int(trades), 
                           float(cumulative_pnl), float(risk_multiplier), float(allocation_size),
                           float(score), float(win_rate), current_time, current_time))
+                    insert_elapsed = time.time() - insert_start_time
+                    logger.info(f"save_whale: INSERT completed in {insert_elapsed:.1f}s for {addr[:10]}")
                 
+                logger.info(f"save_whale: Committing transaction for {addr[:10]}...")
+                commit_start_time = time.time()
                 self.conn.commit()
+                commit_elapsed = time.time() - commit_start_time
+                logger.info(f"save_whale: COMMIT completed in {commit_elapsed:.1f}s for {addr[:10]}")
                 save_completed_time = time.time()
                 logger.info(f"save_whale: Database save completed in {save_completed_time - lock_acquired_time:.1f}s for {addr[:10]}")
                 return True
