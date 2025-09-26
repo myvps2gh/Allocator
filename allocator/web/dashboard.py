@@ -415,7 +415,10 @@ DASHBOARD_TEMPLATE = """
         function sortTable(column) {
             const table = document.querySelector('table');
             const tbody = table.querySelector('tbody');
-            const rows = Array.from(tbody.querySelectorAll('tr'));
+            
+            // Get only main whale rows (exclude token breakdown rows)
+            const allRows = Array.from(tbody.querySelectorAll('tr'));
+            const whaleRows = allRows.filter(row => !row.id.startsWith('tokens-'));
             
             // Determine sort direction
             if (currentSort.column === column) {
@@ -435,8 +438,8 @@ DASHBOARD_TEMPLATE = """
                 currentHeader.textContent = currentSort.direction === 'asc' ? '↑' : '↓';
             }
 
-            // Sort rows
-            rows.sort((a, b) => {
+            // Sort whale rows
+            whaleRows.sort((a, b) => {
                 let aValue, bValue;
                 
                 // Get cell values based on column
@@ -471,8 +474,23 @@ DASHBOARD_TEMPLATE = """
                 }
             });
             
-            // Re-append sorted rows
-            rows.forEach(row => tbody.appendChild(row));
+            // Rebuild tbody with sorted whale rows and their token rows
+            const newTbody = document.createElement('tbody');
+            
+            whaleRows.forEach(whaleRow => {
+                // Add the whale row
+                newTbody.appendChild(whaleRow);
+                
+                // Find and add its corresponding token row
+                const whaleAddress = whaleRow.querySelector('td:first-child').textContent.trim();
+                const tokenRow = document.getElementById('tokens-' + whaleAddress);
+                if (tokenRow) {
+                    newTbody.appendChild(tokenRow);
+                }
+            });
+            
+            // Replace the old tbody
+            tbody.parentNode.replaceChild(newTbody, tbody);
         }
 
         function getColumnIndex(column) {
