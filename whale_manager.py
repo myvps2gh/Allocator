@@ -171,8 +171,8 @@ if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser(description="Whale Manager - Manage whales without affecting main service")
-    parser.add_argument("--top", type=int, metavar="N", default=10,
-                       help="Show top N whales for copying (default: 10)")
+    parser.add_argument("--top", type=int, metavar="N", default=None,
+                       help="Show top N whales for copying")
     parser.add_argument("--discarded", action="store_true",
                        help="Show all discarded whales")
     parser.add_argument("--rescan", type=str, metavar="ADDRESS",
@@ -184,7 +184,7 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     
-    if args.top:
+    if args.top is not None:
         show_top_whales(args.top)
     elif args.discarded:
         show_discarded_whales()
