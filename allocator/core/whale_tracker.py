@@ -210,19 +210,20 @@ class WhaleTracker:
         
         try:
             headers = {"X-API-Key": self.moralis_api_key}
-            url = f"https://deep-index.moralis.io/api/v2.2/wallets/{whale_address}/profitability/summary?chain=eth"
+            url = f"https://deep-index.moralis.io/api/v2.2/wallets/{whale_address}/profitability?chain=eth"
             
-            response = requests.get(url, headers=headers, timeout=10)
+            response = requests.get(url, headers=headers, timeout=15)
             
             if response.status_code == 200:
                 data = response.json()
                 
-                # Extract relevant data
+                # Extract relevant data from the full profitability endpoint
                 moralis_data = {
                     "realized_usd": Decimal(str(data.get("total_realized_profit_usd", 0))),
                     "realized_pct": Decimal(str(data.get("total_realized_profit_percentage", 0))),
                     "total_trades": data.get("total_count_of_trades", 0),
-                    "timestamp": time.time()
+                    "timestamp": time.time(),
+                    "full_data": data  # Store full data for token processing
                 }
                 
                 # Cache the result
@@ -264,8 +265,10 @@ class WhaleTracker:
                 return True
         
         # Fetch fresh data from Moralis
+        logger.info(f"Fetching Moralis data for {whale_address[:10]}...")
         moralis_data = self.fetch_moralis_data(whale_address)
         if not moralis_data:
+            logger.warning(f"Failed to fetch Moralis data for {whale_address[:10]}...")
             return False
         
         # Check if meets criteria
@@ -341,6 +344,14 @@ class WhaleTracker:
         )
         
         logger.info(f"Initialized whale {whale_address} metrics: risk={initial_risk:.2f}, allocation={initial_allocation:.2f} ETH, score={estimated_score:.2f}")        
+        
+        # Automatically fetch token data since we have the full profitability data
+        if 'full_data' in moralis_data:
+            logger.info(f"Auto-fetching token data for validated whale {whale_address}")
+            try:
+                self.fetch_token_data_from_moralis(whale_address)
+            except Exception as e:
+                logger.warning(f"Failed to auto-fetch token data for {whale_address}: {e}")
         
         logger.info(f"Added whale {whale_address} to tracking: {moralis_data['realized_pct']}% ROI, ${moralis_data['realized_usd']} profit")
         return True
@@ -454,12 +465,23 @@ class WhaleTracker:
             # Validate with Moralis
             validated_whales = []
             logger.info(f"Starting Moralis validation for {len(candidates)} adaptive candidates...")
-            for i, whale_address in enumerate(candidates):
+            
+            # Limit validation to first 20 candidates to avoid timeout
+            max_candidates = min(20, len(candidates))
+            candidates_to_validate = candidates[:max_candidates]
+            
+            if len(candidates) > max_candidates:
+                logger.info(f"Limiting validation to first {max_candidates} candidates to avoid timeout")
+            
+            for i, whale_address in enumerate(candidates_to_validate):
                 try:
-                    logger.info(f"Validating candidate {i+1}/{len(candidates)}: {whale_address[:10]}...")
+                    start_time = time.time()
+                    logger.info(f"Validating candidate {i+1}/{len(candidates_to_validate)}: {whale_address[:10]}...")
+                    
                     if self.bootstrap_whale_from_moralis(whale_address):
                         validated_whales.append(whale_address)
-                        logger.info(f"✅ Candidate {whale_address[:10]}... validated and added")
+                        elapsed = time.time() - start_time
+                        logger.info(f"✅ Candidate {whale_address[:10]}... validated and added ({elapsed:.1f}s)")
                         # Track acceptance
                         self.moralis_feedback.track_moralis_acceptance(
                             address=whale_address,
@@ -469,15 +491,21 @@ class WhaleTracker:
                             discovery_mode="adaptive_percentile"
                         )
                     else:
-                        logger.info(f"❌ Candidate {whale_address[:10]}... rejected by Moralis")
+                        elapsed = time.time() - start_time
+                        logger.info(f"❌ Candidate {whale_address[:10]}... rejected by Moralis ({elapsed:.1f}s)")
                         # Track rejection (reason will be determined in bootstrap_whale_from_moralis)
                         self.moralis_feedback.track_moralis_rejection(
                             address=whale_address,
                             reason="failed_validation",
                             discovery_mode="adaptive_percentile"
                         )
+                    
+                    # Add small delay to prevent overwhelming the API
+                    time.sleep(0.5)
+                    
                 except Exception as e:
-                    logger.warning(f"Failed to validate adaptive candidate {whale_address[:10]}...: {e}")
+                    elapsed = time.time() - start_time
+                    logger.warning(f"Failed to validate adaptive candidate {whale_address[:10]}...: {e} ({elapsed:.1f}s)")
                     self.moralis_feedback.track_moralis_rejection(
                         address=whale_address,
                         reason="api_error",
@@ -835,25 +863,11 @@ class WhaleTracker:
         logger.info(f"Fetching token-level data from Moralis for whale {whale_address}")
         
         try:
-            # Check rate limiting
-            if not self.rate_limiter.can_make_call("moralis_api"):
-                logger.warning(f"Rate limited for Moralis API call for {whale_address}")
-                return
-            
-            # Try the profitability breakdown endpoint - this gives us actual realized PnL per token!
-            profitability_url = f"https://deep-index.moralis.io/api/v2.2/wallets/{whale_address}/profitability"
-            
-            headers = {
-                "X-API-Key": self.moralis_api_key
-            }
-            
-            # Call the breakdown endpoint (not summary) to get the token array
-            logger.info(f"Calling Moralis profitability breakdown API for {whale_address}")
-            response = requests.get(profitability_url, headers=headers, timeout=30)
-            
-            if response.status_code == 200:
-                data = response.json()
-                logger.debug(f"Profitability breakdown response keys: {list(data.keys()) if isinstance(data, dict) else type(data)}")
+            # First, check if we already have the full data from the previous API call
+            cached_data = self.cache.get('moralis', whale_address)
+            if cached_data and 'full_data' in cached_data:
+                logger.info(f"Using cached full profitability data for {whale_address}")
+                data = cached_data['full_data']
                 
                 # The breakdown endpoint returns: {"result": [array of token objects]}
                 if "result" in data and isinstance(data["result"], list):
@@ -863,9 +877,39 @@ class WhaleTracker:
                 else:
                     logger.warning(f"Unexpected profitability breakdown structure for {whale_address}: {list(data.keys())}")
                 
-                logger.warning(f"Could not process profitability data for {whale_address}, falling back to transfers")
+                logger.warning(f"Could not process cached profitability data for {whale_address}, falling back to transfers")
             else:
-                logger.warning(f"Profitability API failed ({response.status_code}) for {whale_address}, falling back to transfers: {response.text}")
+                # Check rate limiting
+                if not self.rate_limiter.can_make_call("moralis_api"):
+                    logger.warning(f"Rate limited for Moralis API call for {whale_address}")
+                    return
+                
+                # Try the profitability breakdown endpoint - this gives us actual realized PnL per token!
+                profitability_url = f"https://deep-index.moralis.io/api/v2.2/wallets/{whale_address}/profitability"
+                
+                headers = {
+                    "X-API-Key": self.moralis_api_key
+                }
+                
+                # Call the breakdown endpoint (not summary) to get the token array
+                logger.info(f"Calling Moralis profitability breakdown API for {whale_address}")
+                response = requests.get(profitability_url, headers=headers, timeout=30)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    logger.debug(f"Profitability breakdown response keys: {list(data.keys()) if isinstance(data, dict) else type(data)}")
+                    
+                    # The breakdown endpoint returns: {"result": [array of token objects]}
+                    if "result" in data and isinstance(data["result"], list):
+                        # Process the token breakdown from the result array
+                        if self._process_profitability_breakdown(whale_address, data):
+                            return
+                    else:
+                        logger.warning(f"Unexpected profitability breakdown structure for {whale_address}: {list(data.keys())}")
+                    
+                    logger.warning(f"Could not process profitability data for {whale_address}, falling back to transfers")
+                else:
+                    logger.warning(f"Profitability API failed ({response.status_code}) for {whale_address}, falling back to transfers: {response.text}")
             
             # Fallback to token transfers method
             token_transfers_url = f"https://deep-index.moralis.io/api/v2.2/{whale_address}/erc20/transfers"
