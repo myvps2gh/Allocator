@@ -738,7 +738,7 @@ ANALYSIS_TEMPLATE = """
                     {% for token_row in whale.token_breakdown %}
                     {% if loop.index <= 5 %}
                     {% if token_row[0] != 'PROCESSED' %}
-                    <span class="token {% if token_row[2] > 0 %}positive{% else %}negative{% endif %}">{{ token_row[0] }}: {{ token_row[2]:.2f }} ETH ({{ token_row[3] }} trades)</span>
+                    <span class="token {% if token_row[2] > 0 %}positive{% else %}negative{% endif %}">{{ token_row[0] }}: {{ "%.2f"|format(token_row[2]) }} ETH ({{ token_row[3] }} trades)</span>
                     {% endif %}
                     {% endif %}
                     {% endfor %}
