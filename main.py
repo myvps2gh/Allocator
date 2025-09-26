@@ -509,7 +509,7 @@ class AllocatorAI:
             
             # Store candidates in database and get candidates to process
             new_candidates = []
-            for candidate in candidates[:20]:  # Limit to 20 candidates for performance
+            for candidate in candidates:
                 if self._store_adaptive_candidate(candidate, result):
                     new_candidates.append(candidate)
             
@@ -521,19 +521,17 @@ class AllocatorAI:
             # Add new candidates
             candidates_to_process.extend(new_candidates)
             
-            # Add existing unvalidated candidates if we have room
-            if len(candidates_to_process) < 20:
-                existing_unvalidated = self.db_manager.conn.execute("""
-                    SELECT address FROM adaptive_candidates 
-                    WHERE moralis_validated = FALSE 
-                    AND status IN ('discovered', 'failed_moralis', 'error')
-                    ORDER BY discovered_at 
-                    LIMIT ?
-                """, (20 - len(candidates_to_process),)).fetchall()
-                
-                for (address,) in existing_unvalidated:
-                    if address not in candidates_to_process:
-                        candidates_to_process.append(address)
+            # Add existing unvalidated candidates
+            existing_unvalidated = self.db_manager.conn.execute("""
+                SELECT address FROM adaptive_candidates 
+                WHERE moralis_validated = FALSE 
+                AND status IN ('discovered', 'failed_moralis', 'error')
+                ORDER BY discovered_at 
+            """).fetchall()
+            
+            for (address,) in existing_unvalidated:
+                if address not in candidates_to_process:
+                    candidates_to_process.append(address)
             
             logger.info(f"Processing {len(candidates_to_process)} candidates (new: {len(new_candidates)}, existing: {len(candidates_to_process) - len(new_candidates)})")
             

@@ -465,12 +465,7 @@ class WhaleTracker:
             validated_whales = []
             logger.info(f"Starting Moralis validation for {len(candidates)} adaptive candidates...")
             
-            # Limit validation to first 20 candidates to avoid timeout
-            max_candidates = min(20, len(candidates))
-            candidates_to_validate = candidates[:max_candidates]
-            
-            if len(candidates) > max_candidates:
-                logger.info(f"Limiting validation to first {max_candidates} candidates to avoid timeout")
+            candidates_to_validate = candidates
             
             for i, whale_address in enumerate(candidates_to_validate):
                 try:
