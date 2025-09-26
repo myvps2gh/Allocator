@@ -1065,6 +1065,9 @@ def create_app(whale_tracker, risk_manager, db_manager, mode: str = "LIVE") -> F
         """Whale copy trading analysis page"""
         try:
             # Import the analyzer
+            import sys
+            import os
+            sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
             from whale_analyzer import WhaleAnalyzer
             
             # Create analyzer and run analysis
@@ -1089,6 +1092,8 @@ def create_app(whale_tracker, risk_manager, db_manager, mode: str = "LIVE") -> F
                                        moment=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
         except Exception as e:
             logger.error(f"Error in whale analysis: {e}")
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             return f"Analysis error: {e}", 500
     
     # Add catch-all route for debugging  
