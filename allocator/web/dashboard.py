@@ -416,23 +416,9 @@ DASHBOARD_TEMPLATE = """
             console.log('=== SORTING DEBUG ===');
             console.log('Sorting by column:', column);
             
-            // Find the whale performance table specifically
-            const tables = document.querySelectorAll('table');
-            console.log('Found', tables.length, 'tables on page');
-            
-            let table = null;
-            // Look for table with sortable headers (our whale table has sortable class)
-            for (let i = 0; i < tables.length; i++) {
-                const sortableHeaders = tables[i].querySelectorAll('.sortable');
-                if (sortableHeaders.length > 0) {
-                    table = tables[i];
-                    console.log('Found table with sortable headers at index', i, 'with', sortableHeaders.length, 'sortable columns');
-                    break;
-                }
-            }
-            
+            const table = document.querySelector('table');
             if (!table) {
-                console.error('Table with sortable headers not found!');
+                console.error('Table not found!');
                 return;
             }
             
@@ -577,9 +563,9 @@ DASHBOARD_TEMPLATE = """
             });
             
             // Auto-sort by Score v2.0 in descending order on page load
-            setTimeout(() => {
-                sortTable('score');
-            }, 100);
+            // setTimeout(() => {
+            //     sortTable('score');
+            // }, 100);
         });
     </script>
 </body>
