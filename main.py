@@ -34,6 +34,8 @@ from allocator.core import WhaleTracker, TradeExecutor, RiskManager, AllocationE
 from allocator.monitoring import MempoolWatcher
 from allocator.web import create_app
 from allocator.utils.web3_utils import Web3Manager, TokenManager
+from allocator.analytics.adaptive_discovery import AdaptiveDiscoveryEngine
+from allocator.analytics.market_conditions import MarketConditionAnalyzer
 
 # Configure logging
 logging.basicConfig(
@@ -58,6 +60,9 @@ class AllocatorAI:
         # Initialize components
         self.db_manager = DatabaseManager(self.config.database.file_path)
         self.cache_manager = CacheManager()
+        
+        # Create adaptive candidates table
+        self._create_adaptive_candidates_table()
         
         # Initialize Web3
         self.web3_manager = Web3Manager(self.config.web3.rpc_url)
@@ -92,6 +97,56 @@ class AllocatorAI:
         # Application state
         self.is_running = False
         self.mode = "LIVE"  # Will be set by command line args
+    
+    def _create_adaptive_candidates_table(self):
+        """Create table for adaptive discovery candidates"""
+        with self.db_manager.lock:
+            self.db_manager.conn.execute("""
+                CREATE TABLE IF NOT EXISTS adaptive_candidates (
+                    address TEXT PRIMARY KEY,
+                    activity_score INTEGER,
+                    profit_eth REAL,
+                    trades INTEGER,
+                    discovered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    processed_at TIMESTAMP,
+                    moralis_validated BOOLEAN DEFAULT FALSE,
+                    moralis_roi_pct REAL,
+                    moralis_profit_usd REAL,
+                    moralis_trades INTEGER,
+                    status TEXT DEFAULT 'discovered'
+                )
+            """)
+            self.db_manager.conn.commit()
+    
+    def _store_adaptive_candidate(self, address: str, discovery_result: dict) -> bool:
+        """Store candidate in database if not already exists"""
+        try:
+            # Check if already exists
+            existing = self.db_manager.conn.execute(
+                "SELECT address FROM adaptive_candidates WHERE address = ?", (address,)
+            ).fetchone()
+            
+            if existing:
+                return False
+            
+            # Get candidate stats from discovery result
+            thresholds = discovery_result.get("thresholds", {})
+            activity_threshold = thresholds.get("trades", 0)
+            profit_threshold = thresholds.get("profit", 0)
+            
+            # Store candidate
+            self.db_manager.conn.execute("""
+                INSERT INTO adaptive_candidates 
+                (address, activity_score, profit_eth, trades, status)
+                VALUES (?, ?, ?, ?, ?)
+            """, (address, activity_threshold, profit_threshold, activity_threshold, "discovered"))
+            
+            self.db_manager.conn.commit()
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to store candidate {address}: {e}")
+            return False
     
     def setup_wallet(self, wallet_file: str = "wallet.json"):
         """Setup wallet and trade executor"""
@@ -304,41 +359,43 @@ class AllocatorAI:
         def discovery_worker():
             while self.is_running:
                 try:
-                    # Prepare discovery modes list
-                    discovery_modes = list(self.config.discovery.modes)
+                    # Only run adaptive discovery (hardcoded modes commented out)
+                    discovery_modes = []
                     
                     # Add adaptive discovery mode if enabled
                     adaptive_config = getattr(self.config.discovery, 'adaptive_discovery', None)
                     if adaptive_config and getattr(adaptive_config, 'enabled', False):
                         discovery_modes.append('adaptive_percentile')
                     
-                    logger.info(f"Starting PARALLEL discovery for modes: {discovery_modes}")
+                    # Comment out hardcoded discovery modes to focus on adaptive discovery
+                    # discovery_modes = list(self.config.discovery.modes)
+                    # discovery_modes.extend(['bot_hunter', 'active_whale', 'quick_profit_whale'])
                     
-                    # Run all discovery modes in parallel using HTTP connections
-                    import concurrent.futures
+                    if not discovery_modes:
+                        logger.info("No discovery modes enabled, skipping discovery round")
+                        time.sleep(60)  # Wait 1 minute before checking again
+                        continue
+                    
+                    logger.info(f"Starting discovery for modes: {discovery_modes}")
+                    
+                    # Run discovery modes
                     all_validated_whales = {}
                     
-                    with concurrent.futures.ThreadPoolExecutor(max_workers=len(discovery_modes)) as executor:
-                        # Submit all discovery modes simultaneously
-                        futures = {}
-                        for mode in discovery_modes:
+                    for mode in discovery_modes:
+                        try:
                             if mode == 'adaptive_percentile':
                                 # Run adaptive discovery
-                                futures[executor.submit(self._run_adaptive_discovery_mode)] = mode
-                            else:
-                                # Run standard discovery
-                                futures[executor.submit(run_discovery_mode_http, mode)] = mode
-                        
-                        # Collect results as they complete
-                        for future in concurrent.futures.as_completed(futures):
-                            mode = futures[future]
-                            try:
-                                result_mode, validated_whales = future.result()
+                                result_mode, validated_whales = self._run_adaptive_discovery_mode()
                                 all_validated_whales[result_mode] = validated_whales
                                 logger.info(f"Discovery mode {result_mode} completed successfully")
-                            except Exception as e:
-                                logger.error(f"Discovery mode {mode} exception: {e}")
-                                all_validated_whales[mode] = []
+                            else:
+                                # Run standard discovery (commented out)
+                                # result_mode, validated_whales = run_discovery_mode_http(mode)
+                                # all_validated_whales[result_mode] = validated_whales
+                                logger.info(f"Standard discovery mode {mode} is disabled")
+                        except Exception as e:
+                            logger.error(f"Discovery mode {mode} exception: {e}")
+                            all_validated_whales[mode] = []
                     
                     # Summary of the discovery round
                     total_validated = sum(len(whales) for whales in all_validated_whales.values())
@@ -353,17 +410,8 @@ class AllocatorAI:
                             whale_preview = [whale[:10] + "..." for whale in whales[:3]]
                             logger.info(f"Mode {mode} result: {len(whales)} whales {whale_preview}")
                     
-                    # Fetch token data for newly discovered whales
-                    if total_validated > 0:
-                        logger.info(f"Fetching token data for {total_validated} newly discovered whales...")
-                        for mode, whales in all_validated_whales.items():
-                            for whale_address in whales:
-                                try:
-                                    self.whale_tracker.fetch_token_data_from_moralis(whale_address)
-                                    time.sleep(1)  # Small delay to respect rate limits
-                                except Exception as e:
-                                    logger.warning(f"Failed to fetch token data for {whale_address}: {e}")
-                        logger.info("Token data fetching completed")
+                    # Note: Token data fetching is now handled separately via CLI commands
+                    # or the test_adaptive_discovery.py script
                     
                     # Wait before next discovery round
                     refresh_interval = self.config.discovery.refresh_interval
@@ -380,7 +428,7 @@ class AllocatorAI:
         logger.info(f"Started PARALLEL whale discovery for {len(self.config.discovery.modes)} modes using HTTP connections")
     
     def _run_adaptive_discovery_mode(self):
-        """Run adaptive percentile-based discovery mode"""
+        """Run adaptive percentile-based discovery mode (discovery only, no validation)"""
         try:
             logger.info("Starting discovery with mode: adaptive_percentile")
             start_time = time.time()
@@ -391,28 +439,50 @@ class AllocatorAI:
                 logger.warning("Adaptive discovery config not found")
                 return "adaptive_percentile", []
             
-            # Get candidates using adaptive discovery
-            # Only simulate if in DRY_RUN_WO_MOR mode (skip Moralis), otherwise validate with Moralis
-            candidate_whales = self.whale_tracker.discover_whales_adaptive(
-                self.web3_manager.w3,
-                adaptive_config,
-                simulate=(self.mode == "DRY_RUN_WO_MOR")
+            # Initialize adaptive components if needed
+            if self.whale_tracker.market_analyzer is None:
+                self.whale_tracker.market_analyzer = MarketConditionAnalyzer(self.web3_manager.w3, self.whale_tracker.cache)
+            
+            if self.whale_tracker.adaptive_engine is None:
+                self.whale_tracker.adaptive_engine = AdaptiveDiscoveryEngine(self.web3_manager.w3, self.whale_tracker.market_analyzer)
+            
+            # Get percentile configuration
+            percentile_config = getattr(adaptive_config, "percentile_mode", {}) or {}
+            if not percentile_config.get("enabled", False):
+                logger.info("Adaptive percentile discovery is disabled")
+                return "adaptive_percentile", []
+            
+            activity_percentile = percentile_config.get("activity_percentile", 5.0)
+            profit_percentile = percentile_config.get("profit_percentile", 25.0)
+            blocks_back = percentile_config.get("blocks_back", 10000)
+            
+            logger.info(f"Running adaptive discovery: top {activity_percentile}% activity, "
+                       f"top {profit_percentile}% profit over {blocks_back} blocks")
+            
+            # Run adaptive discovery (discovery only, no validation)
+            result = self.whale_tracker.adaptive_engine.discover_whales_percentile(
+                activity_percentile=activity_percentile,
+                profit_percentile=profit_percentile,
+                blocks_back=blocks_back
             )
             
+            candidates = result.get("candidates", [])
+            
             scan_duration = time.time() - start_time
-            logger.info(f"Discovery mode adaptive_percentile found {len(candidate_whales)} candidate whales in {scan_duration:.1f}s")
+            logger.info(f"Discovery mode adaptive_percentile found {len(candidates)} candidate whales in {scan_duration:.1f}s")
             
-            # Validation is already handled in discover_whales_adaptive
-            validated_whales = candidate_whales
+            # Store candidates in adaptive_candidates table for later processing
+            stored_count = 0
+            for candidate in candidates[:50]:  # Limit to 50 candidates
+                if self._store_adaptive_candidate(candidate, result):
+                    stored_count += 1
             
-            if self.mode == "DRY_RUN_WO_MOR":
-                logger.info(f"Mode adaptive_percentile: Skipping additional Moralis validation (DRY_RUN_WO_MOR)")
-            else:
-                logger.info(f"Mode adaptive_percentile: {len(validated_whales)} whales found and validated")
+            logger.info(f"Stored {stored_count} new adaptive candidates in database")
             
+            # Return empty list since validation will be done separately
             total_duration = time.time() - start_time
             logger.info(f"Discovery mode adaptive_percentile completed in {total_duration:.1f}s")
-            return "adaptive_percentile", validated_whales
+            return "adaptive_percentile", []
             
         except Exception as e:
             logger.error(f"Discovery mode adaptive_percentile failed: {e}")
@@ -511,6 +581,10 @@ def main():
                        help="Fetch real token-level data from Moralis for all whales and exit")
     parser.add_argument("--clear-tokens", action="store_true",
                        help="Clear all whale token data and exit")
+    parser.add_argument("--process-adaptive", action="store_true",
+                       help="Process adaptive candidates (validate with Moralis and fetch tokens)")
+    parser.add_argument("--show-adaptive", action="store_true",
+                       help="Show status of adaptive candidates")
     
     args = parser.parse_args()
     
@@ -631,6 +705,119 @@ def main():
                 allocator.db_manager.conn.commit()
             
             logger.info(f"Cleared {deleted_count} token records from database")
+            return
+        
+        # Handle adaptive candidates processing
+        if args.process_adaptive:
+            logger.info("Processing adaptive candidates...")
+            
+            # Get unvalidated candidates
+            candidates = allocator.db_manager.conn.execute("""
+                SELECT address FROM adaptive_candidates 
+                WHERE moralis_validated = FALSE 
+                ORDER BY discovered_at 
+                LIMIT 20
+            """).fetchall()
+            
+            if not candidates:
+                logger.info("No unvalidated adaptive candidates found")
+                return
+            
+            logger.info(f"Validating {len(candidates)} adaptive candidates with Moralis...")
+            validated_count = 0
+            
+            for i, (address,) in enumerate(candidates):
+                try:
+                    logger.info(f"Validating candidate {i+1}/{len(candidates)}: {address[:10]}...")
+                    start_time = time.time()
+                    
+                    # Fetch Moralis data
+                    moralis_data = allocator.whale_tracker.fetch_moralis_data(address)
+                    if not moralis_data:
+                        logger.warning(f"Failed to fetch Moralis data for {address[:10]}...")
+                        continue
+                    
+                    # Check if meets criteria
+                    min_roi_pct = Decimal("5")
+                    min_profit_usd = Decimal("500")
+                    min_trades = 5
+                    
+                    if (moralis_data["realized_pct"] < min_roi_pct or 
+                        moralis_data["realized_usd"] < min_profit_usd or 
+                        moralis_data["total_trades"] < min_trades):
+                        logger.info(f"Candidate {address[:10]}... rejected: "
+                                  f"{moralis_data['realized_pct']}% ROI, "
+                                  f"${moralis_data['realized_usd']} profit, "
+                                  f"{moralis_data['total_trades']} trades")
+                        continue
+                    
+                    # Add to main whales table
+                    if allocator.whale_tracker.bootstrap_whale_from_moralis(address):
+                        validated_count += 1
+                        logger.info(f"✅ Candidate {address[:10]}... added to main whales")
+                        
+                        # Update adaptive candidates table
+                        allocator.db_manager.conn.execute("""
+                            UPDATE adaptive_candidates 
+                            SET moralis_validated = TRUE,
+                                moralis_roi_pct = ?,
+                                moralis_profit_usd = ?,
+                                moralis_trades = ?,
+                                status = 'validated',
+                                processed_at = CURRENT_TIMESTAMP
+                            WHERE address = ?
+                        """, (
+                            float(moralis_data["realized_pct"]),
+                            float(moralis_data["realized_usd"]),
+                            moralis_data["total_trades"],
+                            address
+                        ))
+                        allocator.db_manager.conn.commit()
+                    
+                    elapsed = time.time() - start_time
+                    logger.info(f"Processed {address[:10]}... in {elapsed:.1f}s")
+                    
+                    # Small delay to respect rate limits
+                    time.sleep(0.5)
+                    
+                except Exception as e:
+                    logger.error(f"Error processing {address[:10]}...: {e}")
+            
+            logger.info(f"Processed {validated_count} adaptive candidates successfully")
+            return
+        
+        # Handle show adaptive candidates status
+        if args.show_adaptive:
+            logger.info("Adaptive Candidates Status:")
+            
+            # Get summary statistics
+            stats = allocator.db_manager.conn.execute("""
+                SELECT 
+                    COUNT(*) as total,
+                    SUM(CASE WHEN moralis_validated = TRUE THEN 1 ELSE 0 END) as validated,
+                    SUM(CASE WHEN status = 'tokens_fetched' THEN 1 ELSE 0 END) as tokens_fetched,
+                    SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected
+                FROM adaptive_candidates
+            """).fetchone()
+            
+            logger.info(f"  Total discovered: {stats[0]}")
+            logger.info(f"  Moralis validated: {stats[1]}")
+            logger.info(f"  Token data fetched: {stats[2]}")
+            logger.info(f"  Rejected: {stats[3]}")
+            
+            # Show recent candidates
+            recent = allocator.db_manager.conn.execute("""
+                SELECT address, status, moralis_roi_pct, moralis_profit_usd, moralis_trades
+                FROM adaptive_candidates 
+                ORDER BY discovered_at DESC 
+                LIMIT 10
+            """).fetchall()
+            
+            if recent:
+                logger.info("Recent candidates:")
+                for address, status, roi, profit, trades in recent:
+                    logger.info(f"  {address[:10]}... | {status} | {roi or 'N/A'}% ROI | ${profit or 'N/A'} | {trades or 'N/A'} trades")
+            
             return
         
         # Handle token data fetching command

@@ -515,19 +515,53 @@ def create_app(whale_tracker, risk_manager, db_manager, mode: str = "LIVE") -> F
             
             # Get discovery status
             discovery_status = []
-            if hasattr(whale_tracker, 'discovery_modes') and whale_tracker.discovery_modes:
-                for mode_name, config in whale_tracker.discovery_modes.items():
-                    # Check if this mode is in the active discovery list
-                    discovery_status.append({
-                        "mode": mode_name,
-                        "status": "idle",  # We'll enhance this later with real-time status
-                        "blocks_back": config.get("blocks_back", 0),
-                        "min_trades": config.get("min_trades", 0),
-                        "min_pnl_threshold": config.get("min_pnl_threshold", 0),
-                        "candidates_found": None,
-                        "validated_whales": None,
-                        "last_run_duration": None
-                    })
+            
+            # Add adaptive discovery status
+            try:
+                adaptive_stats = db_manager.conn.execute("""
+                    SELECT 
+                        COUNT(*) as total_candidates,
+                        SUM(CASE WHEN moralis_validated = TRUE THEN 1 ELSE 0 END) as validated_candidates,
+                        SUM(CASE WHEN status = 'tokens_fetched' THEN 1 ELSE 0 END) as tokens_fetched
+                    FROM adaptive_candidates
+                """).fetchone()
+                
+                discovery_status.append({
+                    "mode": "adaptive_percentile",
+                    "status": "running",
+                    "blocks_back": "Dynamic",
+                    "min_trades": "Adaptive",
+                    "min_pnl_threshold": "Market-based",
+                    "candidates_found": adaptive_stats[0] if adaptive_stats else 0,
+                    "validated_whales": adaptive_stats[1] if adaptive_stats else 0,
+                    "last_run_duration": f"{adaptive_stats[2] if adaptive_stats else 0} tokens fetched"
+                })
+            except Exception as e:
+                logger.warning(f"Could not get adaptive discovery stats: {e}")
+                discovery_status.append({
+                    "mode": "adaptive_percentile",
+                    "status": "error",
+                    "blocks_back": "N/A",
+                    "min_trades": "N/A",
+                    "min_pnl_threshold": "N/A",
+                    "candidates_found": 0,
+                    "validated_whales": 0,
+                    "last_run_duration": "Error"
+                })
+            
+            # Add standard discovery modes (commented out for now)
+            # if hasattr(whale_tracker, 'discovery_modes') and whale_tracker.discovery_modes:
+            #     for mode_name, config in whale_tracker.discovery_modes.items():
+            #         discovery_status.append({
+            #             "mode": mode_name,
+            #             "status": "disabled",
+            #             "blocks_back": config.get("blocks_back", 0),
+            #             "min_trades": config.get("min_trades", 0),
+            #             "min_pnl_threshold": config.get("min_pnl_threshold", 0),
+            #             "candidates_found": None,
+            #             "validated_whales": None,
+            #             "last_run_duration": "Disabled"
+            #         })
             
             response = make_response(render_template_string(
                 DASHBOARD_TEMPLATE,
