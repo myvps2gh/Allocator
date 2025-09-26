@@ -189,7 +189,7 @@ DASHBOARD_TEMPLATE = """
     <div class="stats-grid">
         <div class="stat-card">
             <div class="stat-label">Total PnL</div>
-            <div class="stat-value {{ 'positive' if total_pnl > 0 else 'negative' if total_pnl < 0 else 'neutral' }}">
+            <div class="stat-value {% if total_pnl > 0 %}positive{% elif total_pnl < 0 %}negative{% else %}neutral{% endif %}">
                 {{ '%.4f' | format(total_pnl) }} ETH
             </div>
         </div>
@@ -384,7 +384,7 @@ DASHBOARD_TEMPLATE = """
                     <td style="padding: 15px; border-bottom: 1px solid #dee2e6;">{{ t.token_in }} → {{ t.token_out }}</td>
                     <td style="padding: 15px; border-bottom: 1px solid #dee2e6;">{{ '%.4f' | format(t.amount_in) }}</td>
                     <td style="padding: 15px; border-bottom: 1px solid #dee2e6;">{{ '%.4f' | format(t.amount_out) }}</td>
-                    <td style="padding: 15px; border-bottom: 1px solid #dee2e6;" class="{{ 'positive' if t.pnl > 0 else 'negative' if t.pnl < 0 else 'neutral' }}">
+                    <td style="padding: 15px; border-bottom: 1px solid #dee2e6;" class="{% if t.pnl > 0 %}positive{% elif t.pnl < 0 %}negative{% else %}neutral{% endif %}">
                         {{ '%.4f' | format(t.pnl) }}
                     </td>
                     <td style="padding: 15px; border-bottom: 1px solid #dee2e6;">{{ t.mode }}</td>
