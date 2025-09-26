@@ -127,6 +127,7 @@ class AllocatorAI:
             ).fetchone()
             
             if existing:
+                logger.debug(f"Candidate {address[:10]}... already exists in database")
                 return False
             
             # Get candidate stats from discovery result
@@ -134,14 +135,15 @@ class AllocatorAI:
             activity_threshold = thresholds.get("trades", 0)
             profit_threshold = thresholds.get("profit", 0)
             
-            # Store candidate
+            # Store candidate with initial status
             self.db_manager.conn.execute("""
                 INSERT INTO adaptive_candidates 
-                (address, activity_score, profit_eth, trades, status)
-                VALUES (?, ?, ?, ?, ?)
-            """, (address, activity_threshold, profit_threshold, activity_threshold, "discovered"))
+                (address, activity_score, profit_eth, trades, status, moralis_validated)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (address, activity_threshold, profit_threshold, activity_threshold, "discovered", False))
             
             self.db_manager.conn.commit()
+            logger.info(f"Stored new candidate: {address[:10]}...")
             return True
             
         except Exception as e:
@@ -471,18 +473,129 @@ class AllocatorAI:
             scan_duration = time.time() - start_time
             logger.info(f"Discovery mode adaptive_percentile found {len(candidates)} candidate whales in {scan_duration:.1f}s")
             
-            # Store candidates in adaptive_candidates table for later processing
+            # Store candidates and immediately validate them (like old discovery modes)
             stored_count = 0
-            for candidate in candidates[:50]:  # Limit to 50 candidates
+            validated_whales = []
+            
+            for candidate in candidates[:20]:  # Limit to 20 candidates for performance
                 if self._store_adaptive_candidate(candidate, result):
                     stored_count += 1
+                    
+                    # Immediately validate with Moralis (unless in DRY_RUN_WO_MOR mode)
+                    if self.mode == "DRY_RUN_WO_MOR":
+                        logger.info(f"Mode adaptive_percentile: Skipping Moralis validation (DRY_RUN_WO_MOR)")
+                        validated_whales.append(candidate)
+                    else:
+                        try:
+                            logger.info(f"Validating candidate {stored_count}/{len(candidates[:20])}: {candidate[:10]}...")
+                            start_time = time.time()
+                            
+                            # Fetch Moralis data first to get detailed metrics
+                            moralis_data = self.whale_tracker.fetch_moralis_data(candidate)
+                            if not moralis_data:
+                                logger.warning(f"Failed to fetch Moralis data for {candidate[:10]}...")
+                                # Update adaptive candidates table to mark as failed
+                                self.db_manager.conn.execute("""
+                                    UPDATE adaptive_candidates 
+                                    SET moralis_validated = FALSE, status = 'failed_moralis'
+                                    WHERE address = ?
+                                """, (candidate,))
+                                self.db_manager.conn.commit()
+                                continue
+                            
+                            # Check if meets criteria with detailed logging
+                            min_roi_pct = self.config.trading.min_moralis_roi_pct
+                            min_profit_usd = self.config.trading.min_moralis_profit_usd
+                            min_trades = self.config.trading.min_moralis_trades
+                            
+                            if (moralis_data["realized_pct"] < min_roi_pct or 
+                                moralis_data["realized_usd"] < min_profit_usd or 
+                                moralis_data["total_trades"] < min_trades):
+                                logger.info(f"Candidate {candidate[:10]}... rejected: "
+                                          f"{moralis_data['realized_pct']}% ROI, "
+                                          f"${moralis_data['realized_usd']} profit, "
+                                          f"{moralis_data['total_trades']} trades")
+                                
+                                # Update adaptive candidates table with Moralis data and mark as rejected
+                                self.db_manager.conn.execute("""
+                                    UPDATE adaptive_candidates 
+                                    SET moralis_validated = FALSE, 
+                                        moralis_roi_pct = ?,
+                                        moralis_profit_usd = ?,
+                                        moralis_trades = ?,
+                                        status = 'rejected'
+                                    WHERE address = ?
+                                """, (
+                                    float(moralis_data["realized_pct"]),
+                                    float(moralis_data["realized_usd"]),
+                                    moralis_data["total_trades"],
+                                    candidate
+                                ))
+                                self.db_manager.conn.commit()
+                                continue
+                            
+                            # Check Moralis PnL to see if whale is worth tracking
+                            if self.whale_tracker.bootstrap_whale_from_moralis(
+                                candidate,
+                                min_roi_pct=min_roi_pct,
+                                min_profit_usd=min_profit_usd,
+                                min_trades=min_trades
+                            ):
+                                validated_whales.append(candidate)
+                                elapsed = time.time() - start_time
+                                logger.info(f"✅ Candidate {candidate[:10]}... validated and added to tracking ({elapsed:.1f}s)")
+                                
+                                # Update adaptive candidates table with Moralis data and mark as validated
+                                self.db_manager.conn.execute("""
+                                    UPDATE adaptive_candidates 
+                                    SET moralis_validated = TRUE,
+                                        moralis_roi_pct = ?,
+                                        moralis_profit_usd = ?,
+                                        moralis_trades = ?,
+                                        status = 'validated'
+                                    WHERE address = ?
+                                """, (
+                                    float(moralis_data["realized_pct"]),
+                                    float(moralis_data["realized_usd"]),
+                                    moralis_data["total_trades"],
+                                    candidate
+                                ))
+                                self.db_manager.conn.commit()
+                            else:
+                                logger.info(f"❌ Candidate {candidate[:10]}... rejected by bootstrap_whale_from_moralis")
+                                
+                                # Update adaptive candidates table to mark as rejected
+                                self.db_manager.conn.execute("""
+                                    UPDATE adaptive_candidates 
+                                    SET moralis_validated = FALSE, status = 'rejected'
+                                    WHERE address = ?
+                                """, (candidate,))
+                                self.db_manager.conn.commit()
+                            
+                            # Small delay to respect rate limits
+                            time.sleep(0.5)
+                                
+                        except Exception as e:
+                            logger.error(f"Error validating candidate {candidate[:10]}...: {e}")
+                            # Update adaptive candidates table to mark as error
+                            self.db_manager.conn.execute("""
+                                UPDATE adaptive_candidates 
+                                SET moralis_validated = FALSE, status = 'error'
+                                WHERE address = ?
+                            """, (candidate,))
+                            self.db_manager.conn.commit()
             
-            logger.info(f"Stored {stored_count} new adaptive candidates in database")
+            logger.info(f"Stored {stored_count} new adaptive candidates, validated {len(validated_whales)} whales")
             
-            # Return empty list since validation will be done separately
+            # Log detailed summary like the test script
+            if validated_whales:
+                whale_preview = [whale[:10] + "..." for whale in validated_whales[:3]]
+                logger.info(f"Adaptive discovery result: {len(validated_whales)} whales validated {whale_preview}")
+            
+            # Return validated whales like the old discovery modes
             total_duration = time.time() - start_time
             logger.info(f"Discovery mode adaptive_percentile completed in {total_duration:.1f}s")
-            return "adaptive_percentile", []
+            return "adaptive_percentile", validated_whales
             
         except Exception as e:
             logger.error(f"Discovery mode adaptive_percentile failed: {e}")
