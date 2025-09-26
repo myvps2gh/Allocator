@@ -157,7 +157,13 @@ class DatabaseManager:
                    cumulative_pnl: float = 0.0, risk_multiplier: float = 1.0, 
                    allocation_size: float = 0.0, score: float = 0.0, win_rate: float = 0.0) -> bool:
         """Save whale data to database"""
+        import time
+        logger.info(f"save_whale: Acquiring database lock for {addr[:10]}...")
+        lock_start_time = time.time()
+        
         with self.lock:
+            lock_acquired_time = time.time()
+            logger.info(f"save_whale: Database lock acquired in {lock_acquired_time - lock_start_time:.1f}s for {addr[:10]}")
             try:
                 addr_lower = addr.lower()
                 current_time = int(time.time())
@@ -188,6 +194,8 @@ class DatabaseManager:
                           float(score), float(win_rate), current_time, current_time))
                 
                 self.conn.commit()
+                save_completed_time = time.time()
+                logger.info(f"save_whale: Database save completed in {save_completed_time - lock_acquired_time:.1f}s for {addr[:10]}")
                 return True
             except sqlite3.Error as e:
                 logger.error(f"Database error saving whale {addr}: {e}")
