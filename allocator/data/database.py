@@ -237,11 +237,7 @@ class DatabaseManager:
         with self.lock:
             try:
                 cursor = self.conn.execute("SELECT * FROM whales ORDER BY score DESC")
-                results = cursor.fetchall()
-                logger.info(f"Database query returned {len(results)} whales")
-                if results:
-                    logger.info(f"First whale score: {results[0][9]}, Last whale score: {results[-1][9]}")
-                return results
+                return cursor.fetchall()
             except sqlite3.Error as e:
                 logger.error(f"Database error getting whales sorted by score: {e}")
                 return []

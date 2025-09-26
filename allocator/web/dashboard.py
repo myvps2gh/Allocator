@@ -438,9 +438,6 @@ def create_app(whale_tracker, risk_manager, db_manager, mode: str = "LIVE") -> F
             # Get whale data from database, sorted by Score v2.0 (descending)
             whale_data = []
             db_whales = db_manager.get_all_whales_sorted_by_score()
-            app.logger.info(f"DEBUG: Retrieved {len(db_whales)} whales from database")
-            for i, whale in enumerate(db_whales[:3]):  # Show first 3 for debugging
-                app.logger.info(f"DEBUG: Whale {i}: address={whale[0][:10]}..., score={whale[9]}")
             
             for whale_row in db_whales:
                 # Database columns: 0=address, 1=moralis_roi_pct, 2=roi_usd, 3=trades, 4=bootstrap_time, 
@@ -497,8 +494,8 @@ def create_app(whale_tracker, risk_manager, db_manager, mode: str = "LIVE") -> F
                     logger.warning(f"Error processing whale row {whale_row}: {e}")
                     continue
             
-            # Sort by PnL
-            whale_data.sort(key=lambda x: x["pnl"], reverse=True)
+            # Keep database sort order (already sorted by Score v2.0)
+            # whale_data.sort(key=lambda x: x["pnl"], reverse=True)  # Removed - keeping DB sort order
             
             # Get recent trades
             recent_trades = db_manager.get_recent_trades(20)
