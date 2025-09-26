@@ -735,9 +735,11 @@ ANALYSIS_TEMPLATE = """
             <div class="token-breakdown">
                 <h4>Top Tokens:</h4>
                 <div class="token-list">
-                    {% for symbol, pnl, trades in whale.token_breakdown[:5] %}
+                    {% for symbol, pnl, trades in whale.token_breakdown %}
+                    {% if loop.index <= 5 %}
                     {% if symbol != 'PROCESSED' %}
                     <span class="token {{ 'positive' if pnl > 0 else 'negative' }}">{{ symbol }}: {{ pnl:.2f }} ETH ({{ trades }} trades)</span>
+                    {% endif %}
                     {% endif %}
                     {% endfor %}
                 </div>
