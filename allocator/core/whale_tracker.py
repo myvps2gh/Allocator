@@ -330,6 +330,8 @@ class WhaleTracker:
         estimated_pnl_eth = float(moralis_profit_usd / Decimal("2000"))
         
         # Save to database with meaningful initial values
+        logger.info(f"Saving whale {whale_address} to database...")
+        db_start_time = time.time()
         self.db.save_whale(
             whale_address,
             float(moralis_data["realized_pct"]),
@@ -341,6 +343,8 @@ class WhaleTracker:
             score=estimated_score,
             win_rate=estimated_win_rate
         )
+        db_elapsed = time.time() - db_start_time
+        logger.info(f"Database save completed in {db_elapsed:.1f}s for {whale_address}")
         
         logger.info(f"Initialized whale {whale_address} metrics: risk={initial_risk:.2f}, allocation={initial_allocation:.2f} ETH, score={estimated_score:.2f}")        
         
@@ -348,6 +352,7 @@ class WhaleTracker:
         # Use --fetch-tokens command or the test_adaptive_discovery.py script to fetch token data
         
         logger.info(f"Added whale {whale_address} to tracking: {moralis_data['realized_pct']}% ROI, ${moralis_data['realized_usd']} profit")
+        logger.info(f"bootstrap_whale_from_moralis completed for {whale_address}")
         return True
     
     def discover_whales_from_blocks(self, w3, mode: str = "active_whale", 
